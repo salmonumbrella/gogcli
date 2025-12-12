@@ -19,9 +19,5 @@ jobs:
         run: make fmt-check
       - name: Test
         run: go test ./...
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.62.2
-          args: --timeout=5m
-
+      - name: Lint
+        run: make lint
