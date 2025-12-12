@@ -44,22 +44,6 @@ func tokenSourceForAccountScopes(ctx context.Context, serviceLabel string, email
 		return nil, err
 	}
 
-	if len(tok.Scopes) > 0 {
-		have := make(map[string]struct{}, len(tok.Scopes))
-		for _, s := range tok.Scopes {
-			have[s] = struct{}{}
-		}
-		missing := make([]string, 0)
-		for _, want := range requiredScopes {
-			if _, ok := have[want]; !ok {
-				missing = append(missing, want)
-			}
-		}
-		if len(missing) > 0 {
-			return nil, &MissingScopesError{Service: serviceLabel, Email: email, Missing: missing}
-		}
-	}
-
 	cfg := oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,

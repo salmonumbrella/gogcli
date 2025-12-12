@@ -15,13 +15,3 @@ func (e *AuthRequiredError) Error() string {
 func (e *AuthRequiredError) Unwrap() error {
 	return e.Cause
 }
-
-type MissingScopesError struct {
-	Service string
-	Email   string
-	Missing []string
-}
-
-func (e *MissingScopesError) Error() string {
-	return fmt.Sprintf("missing scopes for %s %s", e.Service, e.Email)
-}
