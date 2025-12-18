@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"mime"
+	"net/mail"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ type mailOptions struct {
 	Bcc               []string
 	Subject           string
 	Body              string
+	BodyHTML          string
 	InReplyTo         string
 	References        string
 	AdditionalHeaders map[string]string
@@ -69,6 +71,13 @@ func buildRFC822(opts mailOptions) ([]byte, error) {
 	}
 	writeHeader(&b, "Subject", encodeHeaderIfNeeded(opts.Subject))
 	writeHeader(&b, "Date", time.Now().Format(time.RFC1123Z))
+	if !hasHeader(opts.AdditionalHeaders, "Message-ID") && !hasHeader(opts.AdditionalHeaders, "Message-Id") {
+		messageID, err := randomMessageID(opts.From)
+		if err != nil {
+			return nil, err
+		}
+		writeHeader(&b, "Message-ID", messageID)
+	}
 	writeHeader(&b, "MIME-Version", "1.0")
 	if strings.TrimSpace(opts.InReplyTo) != "" {
 		if err := validateHeaderValue(opts.InReplyTo); err != nil {
@@ -91,32 +100,68 @@ func buildRFC822(opts mailOptions) ([]byte, error) {
 		}
 	}
 
+	plainBody := normalizeCRLF(opts.Body)
+	htmlBody := normalizeCRLF(opts.BodyHTML)
+	hasPlain := strings.TrimSpace(plainBody) != ""
+	hasHTML := strings.TrimSpace(htmlBody) != ""
+
 	if len(opts.Attachments) == 0 {
-		writeHeader(&b, "Content-Type", "text/plain; charset=\"utf-8\"")
-		writeHeader(&b, "Content-Transfer-Encoding", "7bit")
-		b.WriteString("\r\n")
-		b.WriteString(opts.Body)
-		if !strings.HasSuffix(opts.Body, "\r\n") {
+		switch {
+		case hasPlain && hasHTML:
+			altBoundary, err := randomBoundary()
+			if err != nil {
+				return nil, err
+			}
+			writeHeader(&b, "Content-Type", fmt.Sprintf("multipart/alternative; boundary=%q", altBoundary))
 			b.WriteString("\r\n")
+
+			writeTextPart(&b, altBoundary, "text/plain; charset=\"utf-8\"", plainBody)
+			writeTextPart(&b, altBoundary, "text/html; charset=\"utf-8\"", htmlBody)
+			b.WriteString(fmt.Sprintf("--%s--\r\n", altBoundary))
+			return b.Bytes(), nil
+		case hasHTML && !hasPlain:
+			writeHeader(&b, "Content-Type", "text/html; charset=\"utf-8\"")
+			writeHeader(&b, "Content-Transfer-Encoding", "7bit")
+			b.WriteString("\r\n")
+			writeBodyWithTrailingCRLF(&b, htmlBody)
+			return b.Bytes(), nil
+		default:
+			writeHeader(&b, "Content-Type", "text/plain; charset=\"utf-8\"")
+			writeHeader(&b, "Content-Transfer-Encoding", "7bit")
+			b.WriteString("\r\n")
+			writeBodyWithTrailingCRLF(&b, plainBody)
+			return b.Bytes(), nil
 		}
-		return b.Bytes(), nil
 	}
 
-	boundary, err := randomBoundary()
+	mixedBoundary, err := randomBoundary()
 	if err != nil {
 		return nil, err
 	}
 
-	writeHeader(&b, "Content-Type", fmt.Sprintf("multipart/mixed; boundary=%q", boundary))
+	writeHeader(&b, "Content-Type", fmt.Sprintf("multipart/mixed; boundary=%q", mixedBoundary))
 	b.WriteString("\r\n")
 
 	// Body part
-	b.WriteString(fmt.Sprintf("--%s\r\n", boundary))
-	b.WriteString("Content-Type: text/plain; charset=\"utf-8\"\r\n")
-	b.WriteString("Content-Transfer-Encoding: 7bit\r\n\r\n")
-	b.WriteString(opts.Body)
-	if !strings.HasSuffix(opts.Body, "\r\n") {
-		b.WriteString("\r\n")
+	b.WriteString(fmt.Sprintf("--%s\r\n", mixedBoundary))
+	switch {
+	case hasPlain && hasHTML:
+		altBoundary, err := randomBoundary()
+		if err != nil {
+			return nil, err
+		}
+		b.WriteString(fmt.Sprintf("Content-Type: multipart/alternative; boundary=%q\r\n\r\n", altBoundary))
+		writeTextPart(&b, altBoundary, "text/plain; charset=\"utf-8\"", plainBody)
+		writeTextPart(&b, altBoundary, "text/html; charset=\"utf-8\"", htmlBody)
+		b.WriteString(fmt.Sprintf("--%s--\r\n", altBoundary))
+	case hasHTML && !hasPlain:
+		b.WriteString("Content-Type: text/html; charset=\"utf-8\"\r\n")
+		b.WriteString("Content-Transfer-Encoding: 7bit\r\n\r\n")
+		writeBodyWithTrailingCRLF(&b, htmlBody)
+	default:
+		b.WriteString("Content-Type: text/plain; charset=\"utf-8\"\r\n")
+		b.WriteString("Content-Transfer-Encoding: 7bit\r\n\r\n")
+		writeBodyWithTrailingCRLF(&b, plainBody)
 	}
 
 	// Attachments
@@ -138,7 +183,7 @@ func buildRFC822(opts mailOptions) ([]byte, error) {
 			a.Data = data
 		}
 
-		b.WriteString(fmt.Sprintf("\r\n--%s\r\n", boundary))
+		b.WriteString(fmt.Sprintf("\r\n--%s\r\n", mixedBoundary))
 		b.WriteString(fmt.Sprintf("Content-Type: %s\r\n", a.MIMEType))
 		b.WriteString("Content-Transfer-Encoding: base64\r\n")
 		b.WriteString(fmt.Sprintf("Content-Disposition: attachment; %s\r\n\r\n", contentDispositionFilename(a.Filename)))
@@ -146,7 +191,7 @@ func buildRFC822(opts mailOptions) ([]byte, error) {
 		b.WriteString("\r\n")
 	}
 
-	b.WriteString(fmt.Sprintf("--%s--\r\n", boundary))
+	b.WriteString(fmt.Sprintf("--%s--\r\n", mixedBoundary))
 	return b.Bytes(), nil
 }
 
@@ -172,6 +217,20 @@ func wrapBase64(b []byte) string {
 	return out.String()
 }
 
+func writeBodyWithTrailingCRLF(b *bytes.Buffer, body string) {
+	b.WriteString(body)
+	if !strings.HasSuffix(body, "\r\n") {
+		b.WriteString("\r\n")
+	}
+}
+
+func writeTextPart(b *bytes.Buffer, boundary string, contentType string, body string) {
+	b.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+	b.WriteString(fmt.Sprintf("Content-Type: %s\r\n", contentType))
+	b.WriteString("Content-Transfer-Encoding: 7bit\r\n\r\n")
+	writeBodyWithTrailingCRLF(b, body)
+}
+
 func randomBoundary() (string, error) {
 	var b [18]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -185,6 +244,34 @@ func validateHeaderValue(v string) error {
 		return errors.New("header value contains newline")
 	}
 	return nil
+}
+
+func hasHeader(headers map[string]string, name string) bool {
+	for k := range headers {
+		if strings.EqualFold(k, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func randomMessageID(from string) (string, error) {
+	domain := "gogcli.local"
+	if addr, err := mail.ParseAddress(strings.TrimSpace(from)); err == nil && addr != nil {
+		if at := strings.LastIndex(addr.Address, "@"); at != -1 && at+1 < len(addr.Address) {
+			domain = strings.TrimSpace(addr.Address[at+1:])
+		}
+	} else if at := strings.LastIndex(from, "@"); at != -1 && at+1 < len(from) {
+		domain = strings.TrimSpace(from[at+1:])
+		domain = strings.Trim(domain, " >")
+	}
+
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	local := base64.RawURLEncoding.EncodeToString(b[:])
+	return fmt.Sprintf("<%s@%s>", local, domain), nil
 }
 
 func encodeHeaderIfNeeded(v string) string {
@@ -201,6 +288,13 @@ func isASCII(s string) bool {
 		}
 	}
 	return true
+}
+
+func normalizeCRLF(s string) string {
+	// Normalize to CRLF for RFC 5322 / MIME messages.
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return strings.ReplaceAll(s, "\n", "\r\n")
 }
 
 func contentDispositionFilename(filename string) string {

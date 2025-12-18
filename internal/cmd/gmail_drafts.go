@@ -291,6 +291,7 @@ func newGmailDraftsCreateCmd(flags *rootFlags) *cobra.Command {
 	var bcc string
 	var subject string
 	var body string
+	var bodyHTML string
 	var replyTo string
 	var attach []string
 
@@ -304,8 +305,11 @@ func newGmailDraftsCreateCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if strings.TrimSpace(to) == "" || strings.TrimSpace(subject) == "" || strings.TrimSpace(body) == "" {
-				return errors.New("required: --to, --subject, --body")
+			if strings.TrimSpace(to) == "" || strings.TrimSpace(subject) == "" {
+				return errors.New("required: --to, --subject")
+			}
+			if strings.TrimSpace(body) == "" && strings.TrimSpace(bodyHTML) == "" {
+				return errors.New("required: --body or --body-html")
 			}
 
 			svc, err := newGmailService(cmd.Context(), account)
@@ -330,6 +334,7 @@ func newGmailDraftsCreateCmd(flags *rootFlags) *cobra.Command {
 				Bcc:         splitCSV(bcc),
 				Subject:     subject,
 				Body:        body,
+				BodyHTML:    bodyHTML,
 				InReplyTo:   inReplyTo,
 				References:  references,
 				Attachments: atts,
@@ -371,7 +376,8 @@ func newGmailDraftsCreateCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().StringVar(&cc, "cc", "", "CC recipients (comma-separated)")
 	cmd.Flags().StringVar(&bcc, "bcc", "", "BCC recipients (comma-separated)")
 	cmd.Flags().StringVar(&subject, "subject", "", "Subject (required)")
-	cmd.Flags().StringVar(&body, "body", "", "Body (required)")
+	cmd.Flags().StringVar(&body, "body", "", "Body (plain text; required unless --body-html is set)")
+	cmd.Flags().StringVar(&bodyHTML, "body-html", "", "Body (HTML; optional)")
 	cmd.Flags().StringVar(&replyTo, "reply-to", "", "Reply to message ID (sets In-Reply-To/References and thread)")
 	cmd.Flags().StringSliceVar(&attach, "attach", nil, "Attachment file path (repeatable)")
 	return cmd
