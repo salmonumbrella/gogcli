@@ -74,6 +74,9 @@ Implementation: `internal/config/*`.
 - Key namespace is `gogcli` (keyring `ServiceName`).
 - Key format: `token:<email>`
 - Stored payload is JSON (refresh token + metadata like selected services/scopes).
+- Fallback: if no OS credential store is available, keyring may use its encrypted "file" backend:
+  - Directory: `$(os.UserConfigDir())/gogcli/keyring/` (one file per key)
+  - Password: prompts on TTY; for non-interactive runs set `GOG_KEYRING_PASSWORD`
 
 Current minimal management commands (implemented):
 
@@ -110,6 +113,7 @@ We intentionally avoid storing refresh tokens in plain JSON on disk.
 Environment:
 
 - `GOG_ACCOUNT=you@gmail.com` (used when `--account` is not set)
+- `GOG_KEYRING_PASSWORD=...` (used when keyring falls back to encrypted file backend in non-interactive environments)
 
 ## Commands (current + planned)
 

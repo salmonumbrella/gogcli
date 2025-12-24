@@ -11,6 +11,8 @@
 
 ### Fixed
 
+- Secrets: keyring file-backend fallback now stores encrypted entries in `$(os.UserConfigDir())/gogcli/keyring/` and supports non-interactive via `GOG_KEYRING_PASSWORD` (PR #13 — thanks @advait).
+
 ## 0.1.1 - 2025-12-17
 
 ### Added

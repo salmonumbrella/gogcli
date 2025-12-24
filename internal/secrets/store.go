@@ -3,11 +3,13 @@ package secrets
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/99designs/keyring"
 	"github.com/steipete/gogcli/internal/config"
+	"golang.org/x/term"
 )
 
 type Store interface {
@@ -30,6 +32,22 @@ type Token struct {
 	RefreshToken string    `json:"-"`
 }
 
+const keyringPasswordEnv = "GOG_KEYRING_PASSWORD"
+
+func fileKeyringPasswordFunc() keyring.PromptFunc {
+	if pw := os.Getenv(keyringPasswordEnv); pw != "" {
+		return keyring.FixedStringPrompt(pw)
+	}
+
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		return keyring.TerminalPrompt
+	}
+
+	return func(_ string) (string, error) {
+		return "", fmt.Errorf("no TTY available for keyring file backend password prompt; set %s", keyringPasswordEnv)
+	}
+}
+
 func OpenDefault() (Store, error) {
 	// On Linux/WSL/containers, OS keychains (secret-service/kwallet) may be unavailable.
 	// In that case github.com/99designs/keyring falls back to the "file" backend,
@@ -42,7 +60,7 @@ func OpenDefault() (Store, error) {
 	ring, err := keyring.Open(keyring.Config{
 		ServiceName:      config.AppName,
 		FileDir:          keyringDir,
-		FilePasswordFunc: keyring.TerminalPrompt,
+		FilePasswordFunc: fileKeyringPasswordFunc(),
 	})
 	if err != nil {
 		return nil, err
