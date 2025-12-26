@@ -5,6 +5,7 @@
 ### Changed
 
 - macOS: always trust the `gog` binary in Keychain (removed `GOG_KEYCHAIN_TRUST_APPLICATION`).
+- Calendar: add `--max` + `--page` to `gog calendar calendars` and `gog calendar acl`.
 
 ## 0.2.1 - 2025-12-26
 

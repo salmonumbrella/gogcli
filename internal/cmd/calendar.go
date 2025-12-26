@@ -35,7 +35,10 @@ func newCalendarCmd(flags *rootFlags) *cobra.Command {
 }
 
 func newCalendarCalendarsCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
+	var max int64
+	var page string
+
+	cmd := &cobra.Command{
 		Use:   "calendars",
 		Short: "List calendars",
 		Args:  cobra.NoArgs,
@@ -51,12 +54,15 @@ func newCalendarCalendarsCmd(flags *rootFlags) *cobra.Command {
 				return err
 			}
 
-			resp, err := svc.CalendarList.List().Do()
+			resp, err := svc.CalendarList.List().MaxResults(max).PageToken(page).Do()
 			if err != nil {
 				return err
 			}
 			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{"calendars": resp.Items})
+				return outfmt.WriteJSON(os.Stdout, map[string]any{
+					"calendars":     resp.Items,
+					"nextPageToken": resp.NextPageToken,
+				})
 			}
 			if len(resp.Items) == 0 {
 				u.Err().Println("No calendars")
@@ -69,13 +75,23 @@ func newCalendarCalendarsCmd(flags *rootFlags) *cobra.Command {
 				fmt.Fprintf(tw, "%s\t%s\t%s\n", c.Id, c.Summary, c.AccessRole)
 			}
 			_ = tw.Flush()
+			if resp.NextPageToken != "" {
+				u.Err().Printf("# Next page: --page %s", resp.NextPageToken)
+			}
 			return nil
 		},
 	}
+
+	cmd.Flags().Int64Var(&max, "max", 100, "Max results")
+	cmd.Flags().StringVar(&page, "page", "", "Page token")
+	return cmd
 }
 
 func newCalendarAclCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
+	var max int64
+	var page string
+
+	cmd := &cobra.Command{
 		Use:   "acl <calendarId>",
 		Short: "List access control rules for a calendar",
 		Args:  cobra.ExactArgs(1),
@@ -92,12 +108,15 @@ func newCalendarAclCmd(flags *rootFlags) *cobra.Command {
 				return err
 			}
 
-			resp, err := svc.Acl.List(calendarID).Do()
+			resp, err := svc.Acl.List(calendarID).MaxResults(max).PageToken(page).Do()
 			if err != nil {
 				return err
 			}
 			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{"rules": resp.Items})
+				return outfmt.WriteJSON(os.Stdout, map[string]any{
+					"rules":         resp.Items,
+					"nextPageToken": resp.NextPageToken,
+				})
 			}
 			if len(resp.Items) == 0 {
 				u.Err().Println("No ACL rules")
@@ -116,9 +135,16 @@ func newCalendarAclCmd(flags *rootFlags) *cobra.Command {
 				fmt.Fprintf(tw, "%s\t%s\t%s\n", scopeType, scopeValue, rule.Role)
 			}
 			_ = tw.Flush()
+			if resp.NextPageToken != "" {
+				u.Err().Printf("# Next page: --page %s", resp.NextPageToken)
+			}
 			return nil
 		},
 	}
+
+	cmd.Flags().Int64Var(&max, "max", 100, "Max results")
+	cmd.Flags().StringVar(&page, "page", "", "Page token")
+	return cmd
 }
 
 func newCalendarEventsCmd(flags *rootFlags) *cobra.Command {

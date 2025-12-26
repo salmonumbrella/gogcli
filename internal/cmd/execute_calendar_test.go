@@ -55,6 +55,7 @@ func TestExecute_CalendarCalendars_JSON(t *testing.T) {
 			Summary    string `json:"summary"`
 			AccessRole string `json:"accessRole"`
 		} `json:"calendars"`
+		NextPageToken string `json:"nextPageToken"`
 	}
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Fatalf("json parse: %v\nout=%q", err, out)
