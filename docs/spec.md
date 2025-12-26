@@ -30,7 +30,11 @@ This replaces the existing separate CLIs (`gmcli`, `gccli`, `gdcli`) and the Pyt
 - Root command: `gog`
 - Global flag:
   - `--color=auto|always|never` (default `auto`)
-  - `--output=text|json` (default `text`)
+  - `--json` (JSON output to stdout)
+  - `--plain` (TSV output to stdout; stable/parseable; disables colors)
+  - `--force` (skip confirmations for destructive commands)
+  - `--no-input` (never prompt; fail instead)
+  - `--version` (print version)
 
 Notes:
 
@@ -40,7 +44,8 @@ Notes:
 Environment:
 
 - `GOG_COLOR=auto|always|never` (default `auto`, overridden by `--color`)
-- `GOG_OUTPUT=text|json` (default `text`, overridden by `--output`)
+- `GOG_JSON=1` (default JSON output; overridden by flags)
+- `GOG_PLAIN=1` (default plain output; overridden by flags)
 
 ## Output (TTY-aware colors)
 
@@ -234,15 +239,15 @@ We store a single refresh token per Google account email.
 - People:
   - `profile` (OIDC)
 
-## Output formats (planned)
+## Output formats
 
-Default: machine-friendly tabular output using stdlib `text/tabwriter`.
+Default: human-friendly tables (stdlib `text/tabwriter`).
 
-- Keep stdout stable and parseable:
-  - `--output=text`: plain text, typically tab-separated for list/search style commands
-  - `--output=json`: JSON objects/arrays suitable for scripting
+- Parseable stdout:
+  - `--json`: JSON objects/arrays suitable for scripting
+  - `--plain`: stable TSV (tabs preserved; no alignment; no colors)
 - Human-facing hints/progress are written to stderr so stdout can be safely captured.
-- Colors are only used for human-facing output and are disabled automatically for `--output=json`.
+- Colors are only used for human-facing output and are disabled automatically for `--json` and `--plain`.
 
 We avoid heavy table deps unless we decide we need them.
 
