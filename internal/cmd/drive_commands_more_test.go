@@ -23,10 +23,7 @@ func TestDriveCommands_MoreCoverage(t *testing.T) {
 
 	permCalls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasPrefix(path, "/drive/v3") {
-			path = strings.TrimPrefix(path, "/drive/v3")
-		}
+		path := strings.TrimPrefix(r.URL.Path, "/drive/v3")
 		switch {
 		case strings.Contains(path, "/files/") && strings.HasSuffix(path, "/copy") && r.Method == http.MethodPost:
 			w.Header().Set("Content-Type", "application/json")
@@ -109,7 +106,7 @@ func TestDriveCommands_MoreCoverage(t *testing.T) {
 	}
 	newDriveService = func(context.Context, string) (*drive.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com", Force: true}
+	flags := &RootFlags{Account: "a@b.com", Force: true}
 	u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 	if uiErr != nil {
 		t.Fatalf("ui.New: %v", uiErr)
@@ -118,19 +115,15 @@ func TestDriveCommands_MoreCoverage(t *testing.T) {
 	jsonCtx := outfmt.WithMode(ctx, outfmt.Mode{JSON: true})
 
 	// mkdir text
-	cmd := newDriveMkdirCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"Folder"})
-	if err := cmd.Execute(); err != nil {
+	mkdirCmd := &DriveMkdirCmd{}
+	if err := runKong(t, mkdirCmd, []string{"Folder"}, ctx, flags); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
 	// rename json
 	jsonOut := captureStdout(t, func() {
-		cmd = newDriveRenameCmd(flags)
-		cmd.SetContext(jsonCtx)
-		cmd.SetArgs([]string{"file1", "Renamed"})
-		if err := cmd.Execute(); err != nil {
+		renameCmd := &DriveRenameCmd{}
+		if err := runKong(t, renameCmd, []string{"file1", "Renamed"}, jsonCtx, flags); err != nil {
 			t.Fatalf("rename: %v", err)
 		}
 	})
@@ -140,22 +133,16 @@ func TestDriveCommands_MoreCoverage(t *testing.T) {
 
 	// move json
 	_ = captureStdout(t, func() {
-		cmd = newDriveMoveCmd(flags)
-		cmd.SetContext(jsonCtx)
-		cmd.SetArgs([]string{"file1"})
-		_ = cmd.Flags().Set("parent", "p-new")
-		if err := cmd.Execute(); err != nil {
+		moveCmd := &DriveMoveCmd{}
+		if err := runKong(t, moveCmd, []string{"file1", "--parent", "p-new"}, jsonCtx, flags); err != nil {
 			t.Fatalf("move: %v", err)
 		}
 	})
 
 	// share json (exercise fallback link)
 	shareOut := captureStdout(t, func() {
-		cmd = newDriveShareCmd(flags)
-		cmd.SetContext(jsonCtx)
-		cmd.SetArgs([]string{"file1"})
-		_ = cmd.Flags().Set("anyone", "true")
-		if err := cmd.Execute(); err != nil {
+		shareCmd := &DriveShareCmd{}
+		if err := runKong(t, shareCmd, []string{"file1", "--anyone"}, jsonCtx, flags); err != nil {
 			t.Fatalf("share: %v", err)
 		}
 	})
@@ -164,45 +151,35 @@ func TestDriveCommands_MoreCoverage(t *testing.T) {
 	}
 
 	// unshare text
-	cmd = newDriveUnshareCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"file1", "perm1"})
-	if err := cmd.Execute(); err != nil {
+	unshareCmd := &DriveUnshareCmd{}
+	if err := runKong(t, unshareCmd, []string{"file1", "perm1"}, ctx, flags); err != nil {
 		t.Fatalf("unshare: %v", err)
 	}
 
 	// permissions: first empty text, then json
-	cmd = newDrivePermissionsCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"file1"})
-	if err := cmd.Execute(); err != nil {
+	permissionsCmd := &DrivePermissionsCmd{}
+	if err := runKong(t, permissionsCmd, []string{"file1"}, ctx, flags); err != nil {
 		t.Fatalf("permissions text: %v", err)
 	}
 	_ = captureStdout(t, func() {
-		cmd = newDrivePermissionsCmd(flags)
-		cmd.SetContext(jsonCtx)
-		cmd.SetArgs([]string{"file1"})
-		if err := cmd.Execute(); err != nil {
+		permissionsCmd = &DrivePermissionsCmd{}
+		if err := runKong(t, permissionsCmd, []string{"file1"}, jsonCtx, flags); err != nil {
 			t.Fatalf("permissions json: %v", err)
 		}
 	})
 
 	// copy json
 	_ = captureStdout(t, func() {
-		cmd = newDriveCopyCmd(flags)
-		cmd.SetContext(jsonCtx)
-		cmd.SetArgs([]string{"file1", "Copy"})
-		if err := cmd.Execute(); err != nil {
+		copyCmd := &DriveCopyCmd{}
+		if err := runKong(t, copyCmd, []string{"file1", "Copy"}, jsonCtx, flags); err != nil {
 			t.Fatalf("copy: %v", err)
 		}
 	})
 
 	// delete json
 	_ = captureStdout(t, func() {
-		cmd = newDriveDeleteCmd(flags)
-		cmd.SetContext(jsonCtx)
-		cmd.SetArgs([]string{"file1"})
-		if err := cmd.Execute(); err != nil {
+		deleteCmd := &DriveDeleteCmd{}
+		if err := runKong(t, deleteCmd, []string{"file1"}, jsonCtx, flags); err != nil {
 			t.Fatalf("delete: %v", err)
 		}
 	})
@@ -225,10 +202,7 @@ func TestDriveCommands_TextOutput(t *testing.T) {
 
 	permCalls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasPrefix(path, "/drive/v3") {
-			path = strings.TrimPrefix(path, "/drive/v3")
-		}
+		path := strings.TrimPrefix(r.URL.Path, "/drive/v3")
 		switch {
 		case strings.Contains(path, "/files/") && strings.HasSuffix(path, "/copy") && r.Method == http.MethodPost:
 			w.Header().Set("Content-Type", "application/json")
@@ -329,7 +303,7 @@ func TestDriveCommands_TextOutput(t *testing.T) {
 	}
 	newDriveService = func(context.Context, string) (*drive.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com", Force: true}
+	flags := &RootFlags{Account: "a@b.com", Force: true}
 	uploadPath := filepath.Join(t.TempDir(), "upload.txt")
 	if writeErr := os.WriteFile(uploadPath, []byte("data"), 0o600); writeErr != nil {
 		t.Fatalf("write: %v", writeErr)
@@ -343,69 +317,48 @@ func TestDriveCommands_TextOutput(t *testing.T) {
 		}
 		ctx := ui.WithUI(context.Background(), u)
 
-		cmd := newDriveGetCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"file1"})
-		if err := cmd.Execute(); err != nil {
+		getCmd := &DriveGetCmd{}
+		if err := runKong(t, getCmd, []string{"file1"}, ctx, flags); err != nil {
 			t.Fatalf("get: %v", err)
 		}
 
-		cmd = newDriveDownloadCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"file1"})
-		_ = cmd.Flags().Set("out", downloadPath)
-		if err := cmd.Execute(); err != nil {
+		downloadCmd := &DriveDownloadCmd{}
+		if err := runKong(t, downloadCmd, []string{"file1", "--out", downloadPath}, ctx, flags); err != nil {
 			t.Fatalf("download: %v", err)
 		}
 
-		cmd = newDriveUploadCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{uploadPath})
-		if err := cmd.Execute(); err != nil {
+		uploadCmd := &DriveUploadCmd{}
+		if err := runKong(t, uploadCmd, []string{uploadPath}, ctx, flags); err != nil {
 			t.Fatalf("upload: %v", err)
 		}
 
-		cmd = newDriveRenameCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"file1", "Renamed"})
-		if err := cmd.Execute(); err != nil {
+		renameCmd := &DriveRenameCmd{}
+		if err := runKong(t, renameCmd, []string{"file1", "Renamed"}, ctx, flags); err != nil {
 			t.Fatalf("rename: %v", err)
 		}
 
-		cmd = newDriveMoveCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"file1"})
-		_ = cmd.Flags().Set("parent", "p-new")
-		if err := cmd.Execute(); err != nil {
+		moveCmd := &DriveMoveCmd{}
+		if err := runKong(t, moveCmd, []string{"file1", "--parent", "p-new"}, ctx, flags); err != nil {
 			t.Fatalf("move: %v", err)
 		}
 
-		cmd = newDriveShareCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"file1"})
-		_ = cmd.Flags().Set("anyone", "true")
-		if err := cmd.Execute(); err != nil {
+		shareCmd := &DriveShareCmd{}
+		if err := runKong(t, shareCmd, []string{"file1", "--anyone"}, ctx, flags); err != nil {
 			t.Fatalf("share: %v", err)
 		}
 
-		cmd = newDriveUnshareCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"file1", "perm1"})
-		if err := cmd.Execute(); err != nil {
+		unshareCmd := &DriveUnshareCmd{}
+		if err := runKong(t, unshareCmd, []string{"file1", "perm1"}, ctx, flags); err != nil {
 			t.Fatalf("unshare: %v", err)
 		}
 
-		cmd = newDriveCopyCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"file1", "Copy"})
-		if err := cmd.Execute(); err != nil {
+		copyCmd := &DriveCopyCmd{}
+		if err := runKong(t, copyCmd, []string{"file1", "Copy"}, ctx, flags); err != nil {
 			t.Fatalf("copy: %v", err)
 		}
 
-		cmd = newDriveDeleteCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"file1"})
-		if err := cmd.Execute(); err != nil {
+		deleteCmd := &DriveDeleteCmd{}
+		if err := runKong(t, deleteCmd, []string{"file1"}, ctx, flags); err != nil {
 			t.Fatalf("delete: %v", err)
 		}
 	})

@@ -49,7 +49,7 @@ func TestInfoViaDriveCmd_TextAndJSON(t *testing.T) {
 	}
 	newDriveService = func(context.Context, string) (*drive.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
 	var outBuf bytes.Buffer
 	u, err := ui.New(ui.Options{Stdout: &outBuf, Stderr: io.Discard, Color: "never"})
@@ -59,10 +59,7 @@ func TestInfoViaDriveCmd_TextAndJSON(t *testing.T) {
 	ctx := ui.WithUI(context.Background(), u)
 	ctx = outfmt.WithMode(ctx, outfmt.Mode{})
 
-	cmd := newInfoViaDriveCmd(flags, infoViaDriveOptions{Use: "info", Short: "Info"})
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"id1"})
-	if err := cmd.Execute(); err != nil {
+	if err := infoViaDrive(ctx, flags, infoViaDriveOptions{ArgName: "id"}, "id1"); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 	text := outBuf.String()
@@ -78,10 +75,7 @@ func TestInfoViaDriveCmd_TextAndJSON(t *testing.T) {
 		ctx2 := ui.WithUI(context.Background(), u2)
 		ctx2 = outfmt.WithMode(ctx2, outfmt.Mode{JSON: true})
 
-		cmd2 := newInfoViaDriveCmd(flags, infoViaDriveOptions{Use: "info", Short: "Info"})
-		cmd2.SetContext(ctx2)
-		cmd2.SetArgs([]string{"id1"})
-		if err := cmd2.Execute(); err != nil {
+		if err := infoViaDrive(ctx2, flags, infoViaDriveOptions{ArgName: "id"}, "id1"); err != nil {
 			t.Fatalf("execute: %v", err)
 		}
 	})
@@ -130,17 +124,14 @@ func TestInfoViaDriveCmd_ExpectedMimeError(t *testing.T) {
 	}
 	newDriveService = func(context.Context, string) (*drive.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	u, err := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 	if err != nil {
 		t.Fatalf("ui.New: %v", err)
 	}
 	ctx := ui.WithUI(context.Background(), u)
 
-	cmd := newInfoViaDriveCmd(flags, infoViaDriveOptions{Use: "info", Short: "Info", ExpectedMime: "application/vnd.google-apps.spreadsheet", KindLabel: "sheet"})
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"id1"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "not a sheet") {
+	if err := infoViaDrive(ctx, flags, infoViaDriveOptions{ArgName: "id", ExpectedMime: "application/vnd.google-apps.spreadsheet", KindLabel: "sheet"}, "id1"); err == nil || !strings.Contains(err.Error(), "not a sheet") {
 		t.Fatalf("expected mime error, got: %v", err)
 	}
 }

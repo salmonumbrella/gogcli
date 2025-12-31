@@ -26,7 +26,7 @@ This replaces the existing separate CLIs (`gmcli`, `gccli`, `gdcli`) and the Pyt
 
 ## CLI framework
 
-- `github.com/spf13/cobra`
+- `github.com/alecthomas/kong`
 - Root command: `gog`
 - Global flag:
   - `--color=auto|always|never` (default `auto`)
@@ -255,7 +255,7 @@ We avoid heavy table deps unless we decide we need them.
 ## Code layout (current)
 
 - `cmd/gog/main.go` — binary entrypoint
-- `internal/cmd/*` — cobra commands
+- `internal/cmd/*` — kong command structs
 - `internal/ui/*` — color + printing
 - `internal/config/*` — config paths + credential parsing/writing
 - `internal/secrets/*` — keyring store

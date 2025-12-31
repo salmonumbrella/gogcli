@@ -4,7 +4,7 @@ import "testing"
 
 func TestRequireAccount_PrefersFlag(t *testing.T) {
 	t.Setenv("GOG_ACCOUNT", "env@example.com")
-	flags := &rootFlags{Account: "flag@example.com"}
+	flags := &RootFlags{Account: "flag@example.com"}
 	got, err := requireAccount(flags)
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -16,7 +16,7 @@ func TestRequireAccount_PrefersFlag(t *testing.T) {
 
 func TestRequireAccount_UsesEnv(t *testing.T) {
 	t.Setenv("GOG_ACCOUNT", "env@example.com")
-	flags := &rootFlags{}
+	flags := &RootFlags{}
 	got, err := requireAccount(flags)
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -28,7 +28,7 @@ func TestRequireAccount_UsesEnv(t *testing.T) {
 
 func TestRequireAccount_Missing(t *testing.T) {
 	t.Setenv("GOG_ACCOUNT", "")
-	flags := &rootFlags{}
+	flags := &RootFlags{}
 	_, err := requireAccount(flags)
 	if err == nil {
 		t.Fatalf("expected error")

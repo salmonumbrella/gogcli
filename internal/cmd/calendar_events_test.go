@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/steipete/gogcli/internal/outfmt"
 	"github.com/steipete/gogcli/internal/ui"
 	"google.golang.org/api/calendar/v3"
@@ -41,17 +40,15 @@ func TestListCalendarEvents_JSON(t *testing.T) {
 		t.Fatalf("NewService: %v", err)
 	}
 
-	cmd := &cobra.Command{}
 	u, err := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 	if err != nil {
 		t.Fatalf("ui.New: %v", err)
 	}
 	ctx := ui.WithUI(context.Background(), u)
 	ctx = outfmt.WithMode(ctx, outfmt.Mode{JSON: true})
-	cmd.SetContext(ctx)
 
 	jsonOut := captureStdout(t, func() {
-		if err := listCalendarEvents(cmd, svc, "cal1", "2025-01-01T00:00:00Z", "2025-01-02T00:00:00Z", 10, "", ""); err != nil {
+		if err := listCalendarEvents(ctx, svc, "cal1", "2025-01-01T00:00:00Z", "2025-01-02T00:00:00Z", 10, "", ""); err != nil {
 			t.Fatalf("listCalendarEvents: %v", err)
 		}
 	})

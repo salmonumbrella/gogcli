@@ -67,7 +67,7 @@ func TestGmailWatchStartCmd_JSON(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	out := captureStdout(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 		if uiErr != nil {
@@ -76,9 +76,7 @@ func TestGmailWatchStartCmd_JSON(t *testing.T) {
 		ctx := ui.WithUI(context.Background(), u)
 		ctx = outfmt.WithMode(ctx, outfmt.Mode{JSON: true})
 
-		cmd := newGmailWatchStartCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{
+		if execErr := runKong(t, &GmailWatchStartCmd{}, []string{
 			"--topic", "projects/p/topics/t",
 			"--label", "INBOX",
 			"--label", "Custom",
@@ -86,8 +84,7 @@ func TestGmailWatchStartCmd_JSON(t *testing.T) {
 			"--hook-token", "tok",
 			"--include-body",
 			"--max-bytes", "5",
-		})
-		if execErr := cmd.Execute(); execErr != nil {
+		}, ctx, flags); execErr != nil {
 			t.Fatalf("execute: %v", execErr)
 		}
 	})

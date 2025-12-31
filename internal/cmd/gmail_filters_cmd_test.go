@@ -15,17 +15,15 @@ import (
 )
 
 func TestGmailFiltersCreate_Validation(t *testing.T) {
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
-	cmd := newGmailFiltersCreateCmd(flags)
-	cmd.SetArgs([]string{})
-	if err := cmd.Execute(); err == nil {
+	cmd := &GmailFiltersCreateCmd{}
+	if err := runKong(t, cmd, []string{}, context.Background(), flags); err == nil {
 		t.Fatalf("expected missing criteria error")
 	}
 
-	cmd = newGmailFiltersCreateCmd(flags)
-	cmd.SetArgs([]string{"--from", "a@example.com"})
-	if err := cmd.Execute(); err == nil {
+	cmd = &GmailFiltersCreateCmd{}
+	if err := runKong(t, cmd, []string{"--from", "a@example.com"}, context.Background(), flags); err == nil {
 		t.Fatalf("expected missing action error")
 	}
 }
@@ -112,7 +110,7 @@ func TestGmailFilters_TextPaths(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
 	_ = captureStdout(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
@@ -121,22 +119,15 @@ func TestGmailFilters_TextPaths(t *testing.T) {
 		}
 		ctx := ui.WithUI(context.Background(), u)
 
-		cmd := newGmailFiltersListCmd(flags)
-		cmd.SetContext(ctx)
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailFiltersListCmd{}, []string{}, ctx, flags); err != nil {
 			t.Fatalf("list: %v", err)
 		}
 
-		cmd = newGmailFiltersGetCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"f1"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailFiltersGetCmd{}, []string{"f1"}, ctx, flags); err != nil {
 			t.Fatalf("get: %v", err)
 		}
 
-		cmd = newGmailFiltersCreateCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{
+		if err := runKong(t, &GmailFiltersCreateCmd{}, []string{
 			"--from", "a@example.com",
 			"--to", "b@example.com",
 			"--subject", "hi",
@@ -151,15 +142,11 @@ func TestGmailFilters_TextPaths(t *testing.T) {
 			"--trash",
 			"--never-spam",
 			"--important",
-		})
-		if err := cmd.Execute(); err != nil {
+		}, ctx, flags); err != nil {
 			t.Fatalf("create: %v", err)
 		}
 
-		cmd = newGmailFiltersDeleteCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"f2"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailFiltersDeleteCmd{}, []string{"f2"}, ctx, flags); err != nil {
 			t.Fatalf("delete: %v", err)
 		}
 	})
@@ -193,7 +180,7 @@ func TestGmailFiltersList_NoFilters(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	_ = captureStderr(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 		if uiErr != nil {
@@ -201,9 +188,7 @@ func TestGmailFiltersList_NoFilters(t *testing.T) {
 		}
 		ctx := ui.WithUI(context.Background(), u)
 
-		cmd := newGmailFiltersListCmd(flags)
-		cmd.SetContext(ctx)
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailFiltersListCmd{}, []string{}, ctx, flags); err != nil {
 			t.Fatalf("list: %v", err)
 		}
 	})

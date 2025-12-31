@@ -2,17 +2,17 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/steipete/gogcli/internal/ui"
 	"golang.org/x/term"
 )
 
-func confirmDestructive(cmd *cobra.Command, flags *rootFlags, action string) error {
+func confirmDestructive(ctx context.Context, flags *RootFlags, action string) error {
 	if flags.Force {
 		return nil
 	}
@@ -23,7 +23,7 @@ func confirmDestructive(cmd *cobra.Command, flags *rootFlags, action string) err
 	}
 
 	prompt := fmt.Sprintf("Proceed to %s? [y/N]: ", action)
-	if u := ui.FromContext(cmd.Context()); u != nil {
+	if u := ui.FromContext(ctx); u != nil {
 		u.Err().Println(prompt)
 	} else {
 		_, _ = fmt.Fprintln(os.Stderr, prompt)

@@ -37,7 +37,7 @@ func TestGmailWatchServeCmd_UsesStoredHook(t *testing.T) {
 		t.Fatalf("seed: %v", updateErr)
 	}
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	var got *gmailWatchServer
 	listenAndServe = func(srv *http.Server) error {
 		if gs, ok := srv.Handler.(*gmailWatchServer); ok {
@@ -50,10 +50,7 @@ func TestGmailWatchServeCmd_UsesStoredHook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ui.New: %v", err)
 	}
-	cmd := newGmailWatchServeCmd(flags)
-	cmd.SetContext(ui.WithUI(context.Background(), u))
-	cmd.SetArgs([]string{"--port", "9999", "--path", "/hook"})
-	if execErr := cmd.Execute(); execErr != nil {
+	if execErr := runKong(t, &GmailWatchServeCmd{}, []string{"--port", "9999", "--path", "/hook"}, ui.WithUI(context.Background(), u), flags); execErr != nil {
 		t.Fatalf("execute: %v", execErr)
 	}
 	if got == nil {
@@ -89,7 +86,7 @@ func TestGmailWatchServeCmd_DefaultMaxBytes(t *testing.T) {
 		t.Fatalf("seed: %v", updateErr)
 	}
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	var got *gmailWatchServer
 	listenAndServe = func(srv *http.Server) error {
 		if gs, ok := srv.Handler.(*gmailWatchServer); ok {
@@ -102,10 +99,7 @@ func TestGmailWatchServeCmd_DefaultMaxBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ui.New: %v", err)
 	}
-	cmd := newGmailWatchServeCmd(flags)
-	cmd.SetContext(ui.WithUI(context.Background(), u))
-	cmd.SetArgs([]string{"--port", "9999", "--path", "/hook", "--max-bytes", "0"})
-	if execErr := cmd.Execute(); execErr != nil {
+	if execErr := runKong(t, &GmailWatchServeCmd{}, []string{"--port", "9999", "--path", "/hook", "--max-bytes", "0"}, ui.WithUI(context.Background(), u), flags); execErr != nil {
 		t.Fatalf("execute: %v", execErr)
 	}
 	if got == nil {
@@ -142,7 +136,7 @@ func TestGmailWatchServeCmd_SaveHookAndOIDC(t *testing.T) {
 		t.Fatalf("seed: %v", updateErr)
 	}
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	var got *gmailWatchServer
 	listenAndServe = func(srv *http.Server) error {
 		if gs, ok := srv.Handler.(*gmailWatchServer); ok {
@@ -158,9 +152,7 @@ func TestGmailWatchServeCmd_SaveHookAndOIDC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ui.New: %v", err)
 	}
-	cmd := newGmailWatchServeCmd(flags)
-	cmd.SetContext(ui.WithUI(context.Background(), u))
-	cmd.SetArgs([]string{
+	if execErr := runKong(t, &GmailWatchServeCmd{}, []string{
 		"--port", "9999",
 		"--path", "/hook",
 		"--verify-oidc",
@@ -169,8 +161,7 @@ func TestGmailWatchServeCmd_SaveHookAndOIDC(t *testing.T) {
 		"--include-body",
 		"--max-bytes", "10",
 		"--save-hook",
-	})
-	if execErr := cmd.Execute(); execErr != nil {
+	}, ui.WithUI(context.Background(), u), flags); execErr != nil {
 		t.Fatalf("execute: %v", execErr)
 	}
 	if got == nil || got.validator == nil || !got.cfg.VerifyOIDC {

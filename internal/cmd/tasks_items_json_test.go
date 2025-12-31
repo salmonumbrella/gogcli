@@ -63,7 +63,7 @@ func TestTasksItems_JSONPaths(t *testing.T) {
 	}
 	newTasksService = func(context.Context, string) (*tasks.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com", Force: true}
+	flags := &RootFlags{Account: "a@b.com", Force: true}
 	u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 	if uiErr != nil {
 		t.Fatalf("ui.New: %v", uiErr)
@@ -73,88 +73,70 @@ func TestTasksItems_JSONPaths(t *testing.T) {
 
 	// list
 	_ = captureStdout(t, func() {
-		cmd := newTasksListCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"l1"})
-		_ = cmd.Flags().Set("due-min", "2025-01-01T00:00:00Z")
-		_ = cmd.Flags().Set("due-max", "2025-01-02T00:00:00Z")
-		_ = cmd.Flags().Set("completed-min", "2025-01-01T00:00:00Z")
-		_ = cmd.Flags().Set("completed-max", "2025-01-02T00:00:00Z")
-		_ = cmd.Flags().Set("updated-min", "2025-01-01T00:00:00Z")
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &TasksListCmd{}, []string{
+			"l1",
+			"--due-min", "2025-01-01T00:00:00Z",
+			"--due-max", "2025-01-02T00:00:00Z",
+			"--completed-min", "2025-01-01T00:00:00Z",
+			"--completed-max", "2025-01-02T00:00:00Z",
+			"--updated-min", "2025-01-01T00:00:00Z",
+		}, ctx, flags); err != nil {
 			t.Fatalf("list: %v", err)
 		}
 	})
 
 	// add
 	_ = captureStdout(t, func() {
-		cmd := newTasksAddCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"l1"})
-		_ = cmd.Flags().Set("title", "Task")
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &TasksAddCmd{}, []string{
+			"l1",
+			"--title", "Task",
+		}, ctx, flags); err != nil {
 			t.Fatalf("add: %v", err)
 		}
 	})
 
 	// update
 	_ = captureStdout(t, func() {
-		cmd := newTasksUpdateCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"l1", "t1"})
-		_ = cmd.Flags().Set("status", "completed")
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &TasksUpdateCmd{}, []string{
+			"l1", "t1",
+			"--status", "completed",
+		}, ctx, flags); err != nil {
 			t.Fatalf("update: %v", err)
 		}
 	})
 
 	// done
 	_ = captureStdout(t, func() {
-		cmd := newTasksDoneCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"l1", "t1"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &TasksDoneCmd{}, []string{"l1", "t1"}, ctx, flags); err != nil {
 			t.Fatalf("done: %v", err)
 		}
 	})
 
 	// undo
 	_ = captureStdout(t, func() {
-		cmd := newTasksUndoCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"l1", "t1"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &TasksUndoCmd{}, []string{"l1", "t1"}, ctx, flags); err != nil {
 			t.Fatalf("undo: %v", err)
 		}
 	})
 
 	// delete
 	_ = captureStdout(t, func() {
-		cmd := newTasksDeleteCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"l1", "t1"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &TasksDeleteCmd{}, []string{"l1", "t1"}, ctx, flags); err != nil {
 			t.Fatalf("delete: %v", err)
 		}
 	})
 
 	// clear
 	_ = captureStdout(t, func() {
-		cmd := newTasksClearCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"l1"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &TasksClearCmd{}, []string{"l1"}, ctx, flags); err != nil {
 			t.Fatalf("clear: %v", err)
 		}
 	})
 }
 
 func TestTasksAddCmd_MissingTitle(t *testing.T) {
-	flags := &rootFlags{Account: "a@b.com"}
-	cmd := newTasksAddCmd(flags)
-	cmd.SetContext(context.Background())
-	cmd.SetArgs([]string{"l1"})
-	if err := cmd.Execute(); err == nil {
+	flags := &RootFlags{Account: "a@b.com"}
+	if err := runKong(t, &TasksAddCmd{}, []string{"l1"}, context.Background(), flags); err == nil {
 		t.Fatalf("expected error")
 	}
 }

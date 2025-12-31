@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/steipete/gogcli/internal/googleapi"
 	"github.com/steipete/gogcli/internal/outfmt"
 	"github.com/steipete/gogcli/internal/ui"
@@ -20,784 +19,750 @@ import (
 
 var newDriveService = googleapi.NewDrive
 
-func newDriveCmd(flags *rootFlags) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "drive",
-		Short: "Google Drive",
-	}
-
-	cmd.AddCommand(newDriveLsCmd(flags))
-	cmd.AddCommand(newDriveSearchCmd(flags))
-	cmd.AddCommand(newDriveGetCmd(flags))
-	cmd.AddCommand(newDriveDownloadCmd(flags))
-	cmd.AddCommand(newDriveCopyCmd(flags))
-	cmd.AddCommand(newDriveUploadCmd(flags))
-	cmd.AddCommand(newDriveMkdirCmd(flags))
-	cmd.AddCommand(newDriveDeleteCmd(flags))
-	cmd.AddCommand(newDriveMoveCmd(flags))
-	cmd.AddCommand(newDriveRenameCmd(flags))
-	cmd.AddCommand(newDriveShareCmd(flags))
-	cmd.AddCommand(newDriveUnshareCmd(flags))
-	cmd.AddCommand(newDrivePermissionsCmd(flags))
-	cmd.AddCommand(newDriveURLCmd(flags))
-
-	return cmd
+type DriveCmd struct {
+	Ls          DriveLsCmd          `cmd:"" name:"ls" help:"List files in a folder (default: root)"`
+	Search      DriveSearchCmd      `cmd:"" name:"search" help:"Full-text search across Drive"`
+	Get         DriveGetCmd         `cmd:"" name:"get" help:"Get file metadata"`
+	Download    DriveDownloadCmd    `cmd:"" name:"download" help:"Download a file (exports Google Docs formats)"`
+	Copy        DriveCopyCmd        `cmd:"" name:"copy" help:"Copy a file"`
+	Upload      DriveUploadCmd      `cmd:"" name:"upload" help:"Upload a file"`
+	Mkdir       DriveMkdirCmd       `cmd:"" name:"mkdir" help:"Create a folder"`
+	Delete      DriveDeleteCmd      `cmd:"" name:"delete" help:"Delete a file (moves to trash)" aliases:"rm,del"`
+	Move        DriveMoveCmd        `cmd:"" name:"move" help:"Move a file to a different folder"`
+	Rename      DriveRenameCmd      `cmd:"" name:"rename" help:"Rename a file or folder"`
+	Share       DriveShareCmd       `cmd:"" name:"share" help:"Share a file or folder"`
+	Unshare     DriveUnshareCmd     `cmd:"" name:"unshare" help:"Remove a permission from a file"`
+	Permissions DrivePermissionsCmd `cmd:"" name:"permissions" help:"List permissions on a file"`
+	URL         DriveURLCmd         `cmd:"" name:"url" help:"Print web URLs for files"`
 }
 
-func newDriveLsCmd(flags *rootFlags) *cobra.Command {
-	var max int64
-	var page string
-	var query string
-	var parent string
-
-	cmd := &cobra.Command{
-		Use:   "ls",
-		Short: "List files in a folder (default: root)",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-
-			folderID := strings.TrimSpace(parent)
-			if folderID == "" {
-				folderID = "root"
-			}
-
-			svc, err := newDriveService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			q := buildDriveListQuery(folderID, query)
-
-			resp, err := svc.Files.List().
-				Q(q).
-				PageSize(max).
-				PageToken(page).
-				OrderBy("modifiedTime desc").
-				SupportsAllDrives(true).
-				IncludeItemsFromAllDrives(true).
-				Fields("nextPageToken, files(id, name, mimeType, size, modifiedTime, parents, webViewLink)").
-				Context(cmd.Context()).
-				Do()
-			if err != nil {
-				return err
-			}
-
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{
-					"files":         resp.Files,
-					"nextPageToken": resp.NextPageToken,
-				})
-			}
-
-			if len(resp.Files) == 0 {
-				u.Err().Println("No files")
-				return nil
-			}
-
-			w, flush := tableWriter(cmd.Context())
-			defer flush()
-			fmt.Fprintln(w, "ID\tNAME\tTYPE\tSIZE\tMODIFIED")
-			for _, f := range resp.Files {
-				fmt.Fprintf(
-					w,
-					"%s\t%s\t%s\t%s\t%s\n",
-					f.Id,
-					f.Name,
-					driveType(f.MimeType),
-					formatDriveSize(f.Size),
-					formatDateTime(f.ModifiedTime),
-				)
-			}
-			printNextPageHint(u, resp.NextPageToken)
-			return nil
-		},
-	}
-
-	cmd.Flags().Int64Var(&max, "max", 20, "Max results")
-	cmd.Flags().StringVar(&page, "page", "", "Page token")
-	cmd.Flags().StringVar(&query, "query", "", "Drive query filter")
-	cmd.Flags().StringVar(&parent, "parent", "", "Folder ID to list (default: root)")
-	return cmd
+type DriveLsCmd struct {
+	Max    int64  `name:"max" help:"Max results" default:"20"`
+	Page   string `name:"page" help:"Page token"`
+	Query  string `name:"query" help:"Drive query filter"`
+	Parent string `name:"parent" help:"Folder ID to list (default: root)"`
 }
 
-func newDriveSearchCmd(flags *rootFlags) *cobra.Command {
-	var max int64
-	var page string
-
-	cmd := &cobra.Command{
-		Use:   "search <text>",
-		Short: "Full-text search across Drive",
-		Args:  cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			text := strings.Join(args, " ")
-
-			svc, err := newDriveService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			resp, err := svc.Files.List().
-				Q(buildDriveSearchQuery(text)).
-				PageSize(max).
-				PageToken(page).
-				OrderBy("modifiedTime desc").
-				SupportsAllDrives(true).
-				IncludeItemsFromAllDrives(true).
-				Fields("nextPageToken, files(id, name, mimeType, size, modifiedTime, parents, webViewLink)").
-				Context(cmd.Context()).
-				Do()
-			if err != nil {
-				return err
-			}
-
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{
-					"files":         resp.Files,
-					"nextPageToken": resp.NextPageToken,
-				})
-			}
-
-			if len(resp.Files) == 0 {
-				u.Err().Println("No results")
-				return nil
-			}
-
-			w, flush := tableWriter(cmd.Context())
-			defer flush()
-			fmt.Fprintln(w, "ID\tNAME\tTYPE\tSIZE\tMODIFIED")
-			for _, f := range resp.Files {
-				fmt.Fprintf(
-					w,
-					"%s\t%s\t%s\t%s\t%s\n",
-					f.Id,
-					f.Name,
-					driveType(f.MimeType),
-					formatDriveSize(f.Size),
-					formatDateTime(f.ModifiedTime),
-				)
-			}
-			printNextPageHint(u, resp.NextPageToken)
-			return nil
-		},
+func (c *DriveLsCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
 	}
 
-	cmd.Flags().Int64Var(&max, "max", 20, "Max results")
-	cmd.Flags().StringVar(&page, "page", "", "Page token")
-	return cmd
+	folderID := strings.TrimSpace(c.Parent)
+	if folderID == "" {
+		folderID = "root"
+	}
+
+	svc, err := newDriveService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	q := buildDriveListQuery(folderID, c.Query)
+
+	resp, err := svc.Files.List().
+		Q(q).
+		PageSize(c.Max).
+		PageToken(c.Page).
+		OrderBy("modifiedTime desc").
+		SupportsAllDrives(true).
+		IncludeItemsFromAllDrives(true).
+		Fields("nextPageToken, files(id, name, mimeType, size, modifiedTime, parents, webViewLink)").
+		Context(ctx).
+		Do()
+	if err != nil {
+		return err
+	}
+
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{
+			"files":         resp.Files,
+			"nextPageToken": resp.NextPageToken,
+		})
+	}
+
+	if len(resp.Files) == 0 {
+		u.Err().Println("No files")
+		return nil
+	}
+
+	w, flush := tableWriter(ctx)
+	defer flush()
+	fmt.Fprintln(w, "ID\tNAME\tTYPE\tSIZE\tMODIFIED")
+	for _, f := range resp.Files {
+		fmt.Fprintf(
+			w,
+			"%s\t%s\t%s\t%s\t%s\n",
+			f.Id,
+			f.Name,
+			driveType(f.MimeType),
+			formatDriveSize(f.Size),
+			formatDateTime(f.ModifiedTime),
+		)
+	}
+	printNextPageHint(u, resp.NextPageToken)
+	return nil
 }
 
-func newDriveGetCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "get <fileId>",
-		Short: "Get file metadata",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			fileID := args[0]
-
-			svc, err := newDriveService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			f, err := svc.Files.Get(fileID).
-				SupportsAllDrives(true).
-				Fields("id, name, mimeType, size, modifiedTime, createdTime, parents, webViewLink, description, starred").
-				Context(cmd.Context()).
-				Do()
-			if err != nil {
-				return err
-			}
-
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{"file": f})
-			}
-
-			u.Out().Printf("id\t%s", f.Id)
-			u.Out().Printf("name\t%s", f.Name)
-			u.Out().Printf("type\t%s", f.MimeType)
-			u.Out().Printf("size\t%s", formatDriveSize(f.Size))
-			u.Out().Printf("created\t%s", f.CreatedTime)
-			u.Out().Printf("modified\t%s", f.ModifiedTime)
-			if f.Description != "" {
-				u.Out().Printf("description\t%s", f.Description)
-			}
-			u.Out().Printf("starred\t%t", f.Starred)
-			if f.WebViewLink != "" {
-				u.Out().Printf("link\t%s", f.WebViewLink)
-			}
-			return nil
-		},
-	}
+type DriveSearchCmd struct {
+	Query []string `arg:"" name:"query" help:"Search query"`
+	Max   int64    `name:"max" help:"Max results" default:"20"`
+	Page  string   `name:"page" help:"Page token"`
 }
 
-func newDriveDownloadCmd(flags *rootFlags) *cobra.Command {
-	var outPathFlag string
-	var format string
-
-	cmd := &cobra.Command{
-		Use:   "download <fileId>",
-		Short: "Download a file (exports Google Docs formats)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-
-			fileID := args[0]
-
-			svc, err := newDriveService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			meta, err := svc.Files.Get(fileID).
-				SupportsAllDrives(true).
-				Fields("id, name, mimeType").
-				Context(cmd.Context()).
-				Do()
-			if err != nil {
-				return err
-			}
-			if meta.Name == "" {
-				return errors.New("file has no name")
-			}
-
-			destPath, err := resolveDriveDownloadDestPath(meta, outPathFlag)
-			if err != nil {
-				return err
-			}
-
-			downloadedPath, size, err := downloadDriveFile(cmd.Context(), svc, meta, destPath, format)
-			if err != nil {
-				return err
-			}
-
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{
-					"path": downloadedPath,
-					"size": size,
-				})
-			}
-
-			u.Out().Printf("path\t%s", downloadedPath)
-			u.Out().Printf("size\t%s", formatDriveSize(size))
-			return nil
-		},
+func (c *DriveSearchCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	query := strings.TrimSpace(strings.Join(c.Query, " "))
+	if query == "" {
+		return usage("missing query")
 	}
 
-	cmd.Flags().StringVar(&outPathFlag, "out", "", "Output file path (default: gogcli config dir)")
-	cmd.Flags().StringVar(&format, "format", "", "Export format for Google Docs files: pdf|csv|xlsx|pptx|txt|png|docx (default: auto)")
-	return cmd
+	svc, err := newDriveService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	resp, err := svc.Files.List().
+		Q(buildDriveSearchQuery(query)).
+		PageSize(c.Max).
+		PageToken(c.Page).
+		OrderBy("modifiedTime desc").
+		SupportsAllDrives(true).
+		IncludeItemsFromAllDrives(true).
+		Fields("nextPageToken, files(id, name, mimeType, size, modifiedTime, parents, webViewLink)").
+		Context(ctx).
+		Do()
+	if err != nil {
+		return err
+	}
+
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{
+			"files":         resp.Files,
+			"nextPageToken": resp.NextPageToken,
+		})
+	}
+
+	if len(resp.Files) == 0 {
+		u.Err().Println("No results")
+		return nil
+	}
+
+	w, flush := tableWriter(ctx)
+	defer flush()
+	fmt.Fprintln(w, "ID\tNAME\tTYPE\tSIZE\tMODIFIED")
+	for _, f := range resp.Files {
+		fmt.Fprintf(
+			w,
+			"%s\t%s\t%s\t%s\t%s\n",
+			f.Id,
+			f.Name,
+			driveType(f.MimeType),
+			formatDriveSize(f.Size),
+			formatDateTime(f.ModifiedTime),
+		)
+	}
+	printNextPageHint(u, resp.NextPageToken)
+	return nil
 }
 
-func newDriveUploadCmd(flags *rootFlags) *cobra.Command {
-	var name string
-	var parent string
-
-	cmd := &cobra.Command{
-		Use:   "upload <localPath>",
-		Short: "Upload a file",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-
-			localPath := args[0]
-			f, err := os.Open(localPath)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-
-			fileName := name
-			if fileName == "" {
-				fileName = filepath.Base(localPath)
-			}
-
-			svc, err := newDriveService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			meta := &drive.File{Name: fileName}
-			parent = strings.TrimSpace(parent)
-			if parent != "" {
-				meta.Parents = []string{parent}
-			}
-
-			mimeType := guessMimeType(localPath)
-			created, err := svc.Files.Create(meta).
-				SupportsAllDrives(true).
-				Media(f, gapi.ContentType(mimeType)).
-				Fields("id, name, mimeType, size, webViewLink").
-				Context(cmd.Context()).
-				Do()
-			if err != nil {
-				return err
-			}
-
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{"file": created})
-			}
-
-			u.Out().Printf("id\t%s", created.Id)
-			u.Out().Printf("name\t%s", created.Name)
-			if created.WebViewLink != "" {
-				u.Out().Printf("link\t%s", created.WebViewLink)
-			}
-			return nil
-		},
-	}
-
-	cmd.Flags().StringVar(&name, "name", "", "Override filename")
-	cmd.Flags().StringVar(&parent, "parent", "", "Destination folder ID")
-	return cmd
+type DriveGetCmd struct {
+	FileID string `arg:"" name:"fileId" help:"File ID"`
 }
 
-func newDriveMkdirCmd(flags *rootFlags) *cobra.Command {
-	var parent string
-
-	cmd := &cobra.Command{
-		Use:   "mkdir <name>",
-		Short: "Create a folder",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-
-			name := args[0]
-
-			svc, err := newDriveService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			f := &drive.File{
-				Name:     name,
-				MimeType: "application/vnd.google-apps.folder",
-			}
-			if parent != "" {
-				f.Parents = []string{parent}
-			}
-
-			created, err := svc.Files.Create(f).
-				SupportsAllDrives(true).
-				Fields("id, name, webViewLink").
-				Context(cmd.Context()).
-				Do()
-			if err != nil {
-				return err
-			}
-
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{"folder": created})
-			}
-
-			u.Out().Printf("id\t%s", created.Id)
-			u.Out().Printf("name\t%s", created.Name)
-			if created.WebViewLink != "" {
-				u.Out().Printf("link\t%s", created.WebViewLink)
-			}
-			return nil
-		},
+func (c *DriveGetCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	fileID := strings.TrimSpace(c.FileID)
+	if fileID == "" {
+		return usage("empty fileId")
 	}
 
-	cmd.Flags().StringVar(&parent, "parent", "", "Parent folder ID")
-	return cmd
+	svc, err := newDriveService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	f, err := svc.Files.Get(fileID).
+		SupportsAllDrives(true).
+		Fields("id, name, mimeType, size, modifiedTime, createdTime, parents, webViewLink, description, starred").
+		Context(ctx).
+		Do()
+	if err != nil {
+		return err
+	}
+
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{"file": f})
+	}
+
+	u.Out().Printf("id\t%s", f.Id)
+	u.Out().Printf("name\t%s", f.Name)
+	u.Out().Printf("type\t%s", f.MimeType)
+	u.Out().Printf("size\t%s", formatDriveSize(f.Size))
+	u.Out().Printf("created\t%s", f.CreatedTime)
+	u.Out().Printf("modified\t%s", f.ModifiedTime)
+	if f.Description != "" {
+		u.Out().Printf("description\t%s", f.Description)
+	}
+	u.Out().Printf("starred\t%t", f.Starred)
+	if f.WebViewLink != "" {
+		u.Out().Printf("link\t%s", f.WebViewLink)
+	}
+	return nil
 }
 
-func newDriveDeleteCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "delete <fileId>",
-		Short: "Delete a file (moves to trash)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			fileID := args[0]
-
-			if confirmErr := confirmDestructive(cmd, flags, fmt.Sprintf("delete drive file %s", fileID)); confirmErr != nil {
-				return confirmErr
-			}
-
-			svc, err := newDriveService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			if err := svc.Files.Delete(fileID).SupportsAllDrives(true).Context(cmd.Context()).Do(); err != nil {
-				return err
-			}
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{
-					"deleted": true,
-					"id":      fileID,
-				})
-			}
-			u.Out().Printf("deleted\ttrue")
-			u.Out().Printf("id\t%s", fileID)
-			return nil
-		},
-	}
+type DriveDownloadCmd struct {
+	FileID string `arg:"" name:"fileId" help:"File ID"`
+	Out    string `name:"out" help:"Output file path (default: gogcli config dir)"`
+	Format string `name:"format" help:"Export format for Google Docs files: pdf|csv|xlsx|pptx|txt|png|docx (default: auto)"`
 }
 
-func newDriveMoveCmd(flags *rootFlags) *cobra.Command {
-	var parent string
-
-	cmd := &cobra.Command{
-		Use:   "move <fileId>",
-		Short: "Move a file to a different folder",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			fileID := args[0]
-			parent = strings.TrimSpace(parent)
-			if parent == "" {
-				return usage("missing --parent")
-			}
-
-			svc, err := newDriveService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			meta, err := svc.Files.Get(fileID).
-				SupportsAllDrives(true).
-				Fields("id, name, parents").
-				Context(cmd.Context()).
-				Do()
-			if err != nil {
-				return err
-			}
-
-			call := svc.Files.Update(fileID, &drive.File{}).
-				SupportsAllDrives(true).
-				AddParents(parent).
-				Fields("id, name, parents, webViewLink")
-			if len(meta.Parents) > 0 {
-				call = call.RemoveParents(strings.Join(meta.Parents, ","))
-			}
-
-			updated, err := call.Context(cmd.Context()).Do()
-			if err != nil {
-				return err
-			}
-
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{"file": updated})
-			}
-
-			u.Out().Printf("id\t%s", updated.Id)
-			u.Out().Printf("name\t%s", updated.Name)
-			return nil
-		},
+func (c *DriveDownloadCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
 	}
 
-	cmd.Flags().StringVar(&parent, "parent", "", "New parent folder ID (required)")
-	return cmd
+	fileID := strings.TrimSpace(c.FileID)
+	if fileID == "" {
+		return usage("empty fileId")
+	}
+
+	svc, err := newDriveService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	meta, err := svc.Files.Get(fileID).
+		SupportsAllDrives(true).
+		Fields("id, name, mimeType").
+		Context(ctx).
+		Do()
+	if err != nil {
+		return err
+	}
+	if meta.Name == "" {
+		return errors.New("file has no name")
+	}
+
+	destPath, err := resolveDriveDownloadDestPath(meta, c.Out)
+	if err != nil {
+		return err
+	}
+
+	downloadedPath, size, err := downloadDriveFile(ctx, svc, meta, destPath, c.Format)
+	if err != nil {
+		return err
+	}
+
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{
+			"path": downloadedPath,
+			"size": size,
+		})
+	}
+
+	u.Out().Printf("path\t%s", downloadedPath)
+	u.Out().Printf("size\t%s", formatDriveSize(size))
+	return nil
 }
 
-func newDriveRenameCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "rename <fileId> <newName>",
-		Short: "Rename a file or folder",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			fileID := args[0]
-			newName := args[1]
-
-			svc, err := newDriveService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			updated, err := svc.Files.Update(fileID, &drive.File{Name: newName}).
-				SupportsAllDrives(true).
-				Fields("id, name").
-				Context(cmd.Context()).
-				Do()
-			if err != nil {
-				return err
-			}
-
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{"file": updated})
-			}
-
-			u.Out().Printf("id\t%s", updated.Id)
-			u.Out().Printf("name\t%s", updated.Name)
-			return nil
-		},
-	}
+type DriveCopyCmd struct {
+	FileID string `arg:"" name:"fileId" help:"File ID"`
+	Name   string `arg:"" name:"name" help:"New file name"`
+	Parent string `name:"parent" help:"Destination folder ID"`
 }
 
-func newDriveShareCmd(flags *rootFlags) *cobra.Command {
-	var anyone bool
-	var email string
-	var role string
-	var discoverable bool
-
-	cmd := &cobra.Command{
-		Use:   "share <fileId>",
-		Short: "Share a file or folder",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			fileID := args[0]
-
-			if !anyone && email == "" {
-				return usage("must specify --anyone or --email")
-			}
-			if role == "" {
-				role = "reader"
-			}
-			if role != "reader" && role != "writer" {
-				return usage("invalid --role (expected reader|writer)")
-			}
-
-			svc, err := newDriveService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			perm := &drive.Permission{Role: role}
-			if anyone {
-				perm.Type = "anyone"
-				perm.AllowFileDiscovery = discoverable
-			} else {
-				perm.Type = "user"
-				perm.EmailAddress = email
-			}
-
-			created, err := svc.Permissions.Create(fileID, perm).
-				SupportsAllDrives(true).
-				SendNotificationEmail(false).
-				Fields("id, type, role, emailAddress").
-				Context(cmd.Context()).
-				Do()
-			if err != nil {
-				return err
-			}
-
-			link, err := driveWebLink(cmd.Context(), svc, fileID)
-			if err != nil {
-				return err
-			}
-
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{
-					"link":         link,
-					"permissionId": created.Id,
-					"permission":   created,
-				})
-			}
-
-			u.Out().Printf("link\t%s", link)
-			u.Out().Printf("permission_id\t%s", created.Id)
-			return nil
-		},
-	}
-
-	cmd.Flags().BoolVar(&anyone, "anyone", false, "Make publicly accessible")
-	cmd.Flags().StringVar(&email, "email", "", "Share with specific user")
-	cmd.Flags().StringVar(&role, "role", "reader", "Permission: reader|writer")
-	cmd.Flags().BoolVar(&discoverable, "discoverable", false, "Allow file discovery in search (anyone/domain only)")
-	return cmd
+func (c *DriveCopyCmd) Run(ctx context.Context, flags *RootFlags) error {
+	return copyViaDrive(ctx, flags, copyViaDriveOptions{
+		ArgName: "fileId",
+	}, c.FileID, c.Name, c.Parent)
 }
 
-func newDriveUnshareCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "unshare <fileId> <permissionId>",
-		Short: "Remove a permission from a file",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			fileID := args[0]
-			permissionID := args[1]
-
-			if confirmErr := confirmDestructive(cmd, flags, fmt.Sprintf("remove permission %s from drive file %s", permissionID, fileID)); confirmErr != nil {
-				return confirmErr
-			}
-
-			svc, err := newDriveService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			if err := svc.Permissions.Delete(fileID, permissionID).SupportsAllDrives(true).Context(cmd.Context()).Do(); err != nil {
-				return err
-			}
-
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{
-					"removed":      true,
-					"fileId":       fileID,
-					"permissionId": permissionID,
-				})
-			}
-
-			u.Out().Printf("removed\ttrue")
-			u.Out().Printf("file_id\t%s", fileID)
-			u.Out().Printf("permission_id\t%s", permissionID)
-			return nil
-		},
-	}
+type DriveUploadCmd struct {
+	LocalPath string `arg:"" name:"localPath" help:"Path to local file"`
+	Name      string `name:"name" help:"Override filename"`
+	Parent    string `name:"parent" help:"Destination folder ID"`
 }
 
-func newDrivePermissionsCmd(flags *rootFlags) *cobra.Command {
-	var max int64
-	var page string
-
-	cmd := &cobra.Command{
-		Use:   "permissions <fileId>",
-		Short: "List permissions on a file",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			fileID := args[0]
-
-			svc, err := newDriveService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			call := svc.Permissions.List(fileID).
-				SupportsAllDrives(true).
-				Fields("nextPageToken, permissions(id, type, role, emailAddress)").
-				Context(cmd.Context())
-			if max > 0 {
-				call = call.PageSize(max)
-			}
-			if strings.TrimSpace(page) != "" {
-				call = call.PageToken(page)
-			}
-
-			resp, err := call.Do()
-			if err != nil {
-				return err
-			}
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{
-					"fileId":          fileID,
-					"permissions":     resp.Permissions,
-					"permissionCount": len(resp.Permissions),
-					"nextPageToken":   resp.NextPageToken,
-				})
-			}
-			if len(resp.Permissions) == 0 {
-				u.Err().Println("No permissions")
-				return nil
-			}
-
-			w, flush := tableWriter(cmd.Context())
-			defer flush()
-			fmt.Fprintln(w, "ID\tTYPE\tROLE\tEMAIL")
-			for _, p := range resp.Permissions {
-				email := p.EmailAddress
-				if email == "" {
-					email = "-"
-				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Id, p.Type, p.Role, email)
-			}
-			printNextPageHint(u, resp.NextPageToken)
-			return nil
-		},
+func (c *DriveUploadCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
 	}
 
-	cmd.Flags().Int64Var(&max, "max", 100, "Max results")
-	cmd.Flags().StringVar(&page, "page", "", "Page token")
-	return cmd
+	localPath := strings.TrimSpace(c.LocalPath)
+	if localPath == "" {
+		return usage("empty localPath")
+	}
+
+	f, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	fileName := strings.TrimSpace(c.Name)
+	if fileName == "" {
+		fileName = filepath.Base(localPath)
+	}
+
+	svc, err := newDriveService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	meta := &drive.File{Name: fileName}
+	parent := strings.TrimSpace(c.Parent)
+	if parent != "" {
+		meta.Parents = []string{parent}
+	}
+
+	mimeType := guessMimeType(localPath)
+	created, err := svc.Files.Create(meta).
+		SupportsAllDrives(true).
+		Media(f, gapi.ContentType(mimeType)).
+		Fields("id, name, mimeType, size, webViewLink").
+		Context(ctx).
+		Do()
+	if err != nil {
+		return err
+	}
+
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{"file": created})
+	}
+
+	u.Out().Printf("id\t%s", created.Id)
+	u.Out().Printf("name\t%s", created.Name)
+	if created.WebViewLink != "" {
+		u.Out().Printf("link\t%s", created.WebViewLink)
+	}
+	return nil
 }
 
-func newDriveURLCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "url <fileIds...>",
-		Short: "Print web URLs for files",
-		Args:  cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
+type DriveMkdirCmd struct {
+	Name   string `arg:"" name:"name" help:"Folder name"`
+	Parent string `name:"parent" help:"Parent folder ID"`
+}
 
-			svc, err := newDriveService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			for _, id := range args {
-				link, err := driveWebLink(cmd.Context(), svc, id)
-				if err != nil {
-					return err
-				}
-				if outfmt.IsJSON(cmd.Context()) {
-					// collected below
-				} else {
-					u.Out().Printf("%s\t%s", id, link)
-				}
-			}
-			if outfmt.IsJSON(cmd.Context()) {
-				urls := make([]map[string]string, 0, len(args))
-				for _, id := range args {
-					link, err := driveWebLink(cmd.Context(), svc, id)
-					if err != nil {
-						return err
-					}
-					urls = append(urls, map[string]string{"id": id, "url": link})
-				}
-				return outfmt.WriteJSON(os.Stdout, map[string]any{"urls": urls})
-			}
-			return nil
-		},
+func (c *DriveMkdirCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
 	}
+
+	name := strings.TrimSpace(c.Name)
+	if name == "" {
+		return usage("empty name")
+	}
+
+	svc, err := newDriveService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	f := &drive.File{
+		Name:     name,
+		MimeType: "application/vnd.google-apps.folder",
+	}
+	if strings.TrimSpace(c.Parent) != "" {
+		f.Parents = []string{strings.TrimSpace(c.Parent)}
+	}
+
+	created, err := svc.Files.Create(f).
+		SupportsAllDrives(true).
+		Fields("id, name, webViewLink").
+		Context(ctx).
+		Do()
+	if err != nil {
+		return err
+	}
+
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{"folder": created})
+	}
+
+	u.Out().Printf("id\t%s", created.Id)
+	u.Out().Printf("name\t%s", created.Name)
+	if created.WebViewLink != "" {
+		u.Out().Printf("link\t%s", created.WebViewLink)
+	}
+	return nil
+}
+
+type DriveDeleteCmd struct {
+	FileID string `arg:"" name:"fileId" help:"File ID"`
+}
+
+func (c *DriveDeleteCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	fileID := strings.TrimSpace(c.FileID)
+	if fileID == "" {
+		return usage("empty fileId")
+	}
+
+	if confirmErr := confirmDestructive(ctx, flags, fmt.Sprintf("delete drive file %s", fileID)); confirmErr != nil {
+		return confirmErr
+	}
+
+	svc, err := newDriveService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	if err := svc.Files.Delete(fileID).SupportsAllDrives(true).Context(ctx).Do(); err != nil {
+		return err
+	}
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{
+			"deleted": true,
+			"id":      fileID,
+		})
+	}
+	u.Out().Printf("deleted\ttrue")
+	u.Out().Printf("id\t%s", fileID)
+	return nil
+}
+
+type DriveMoveCmd struct {
+	FileID string `arg:"" name:"fileId" help:"File ID"`
+	Parent string `name:"parent" help:"New parent folder ID (required)"`
+}
+
+func (c *DriveMoveCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	fileID := strings.TrimSpace(c.FileID)
+	if fileID == "" {
+		return usage("empty fileId")
+	}
+	parent := strings.TrimSpace(c.Parent)
+	if parent == "" {
+		return usage("missing --parent")
+	}
+
+	svc, err := newDriveService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	meta, err := svc.Files.Get(fileID).
+		SupportsAllDrives(true).
+		Fields("id, name, parents").
+		Context(ctx).
+		Do()
+	if err != nil {
+		return err
+	}
+
+	call := svc.Files.Update(fileID, &drive.File{}).
+		SupportsAllDrives(true).
+		AddParents(parent).
+		Fields("id, name, parents, webViewLink")
+	if len(meta.Parents) > 0 {
+		call = call.RemoveParents(strings.Join(meta.Parents, ","))
+	}
+
+	updated, err := call.Context(ctx).Do()
+	if err != nil {
+		return err
+	}
+
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{"file": updated})
+	}
+
+	u.Out().Printf("id\t%s", updated.Id)
+	u.Out().Printf("name\t%s", updated.Name)
+	return nil
+}
+
+type DriveRenameCmd struct {
+	FileID  string `arg:"" name:"fileId" help:"File ID"`
+	NewName string `arg:"" name:"newName" help:"New name"`
+}
+
+func (c *DriveRenameCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	fileID := strings.TrimSpace(c.FileID)
+	newName := strings.TrimSpace(c.NewName)
+	if fileID == "" {
+		return usage("empty fileId")
+	}
+	if newName == "" {
+		return usage("empty newName")
+	}
+
+	svc, err := newDriveService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	updated, err := svc.Files.Update(fileID, &drive.File{Name: newName}).
+		SupportsAllDrives(true).
+		Fields("id, name").
+		Context(ctx).
+		Do()
+	if err != nil {
+		return err
+	}
+
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{"file": updated})
+	}
+
+	u.Out().Printf("id\t%s", updated.Id)
+	u.Out().Printf("name\t%s", updated.Name)
+	return nil
+}
+
+type DriveShareCmd struct {
+	FileID       string `arg:"" name:"fileId" help:"File ID"`
+	Anyone       bool   `name:"anyone" help:"Make publicly accessible"`
+	Email        string `name:"email" help:"Share with specific user"`
+	Role         string `name:"role" help:"Permission: reader|writer" default:"reader"`
+	Discoverable bool   `name:"discoverable" help:"Allow file discovery in search (anyone/domain only)"`
+}
+
+func (c *DriveShareCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	fileID := strings.TrimSpace(c.FileID)
+	if fileID == "" {
+		return usage("empty fileId")
+	}
+
+	if !c.Anyone && strings.TrimSpace(c.Email) == "" {
+		return usage("must specify --anyone or --email")
+	}
+	role := strings.TrimSpace(c.Role)
+	if role == "" {
+		role = "reader"
+	}
+	if role != "reader" && role != "writer" {
+		return usage("invalid --role (expected reader|writer)")
+	}
+
+	svc, err := newDriveService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	perm := &drive.Permission{Role: role}
+	if c.Anyone {
+		perm.Type = "anyone"
+		perm.AllowFileDiscovery = c.Discoverable
+	} else {
+		perm.Type = "user"
+		perm.EmailAddress = strings.TrimSpace(c.Email)
+	}
+
+	created, err := svc.Permissions.Create(fileID, perm).
+		SupportsAllDrives(true).
+		SendNotificationEmail(false).
+		Fields("id, type, role, emailAddress").
+		Context(ctx).
+		Do()
+	if err != nil {
+		return err
+	}
+
+	link, err := driveWebLink(ctx, svc, fileID)
+	if err != nil {
+		return err
+	}
+
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{
+			"link":         link,
+			"permissionId": created.Id,
+			"permission":   created,
+		})
+	}
+
+	u.Out().Printf("link\t%s", link)
+	u.Out().Printf("permission_id\t%s", created.Id)
+	return nil
+}
+
+type DriveUnshareCmd struct {
+	FileID       string `arg:"" name:"fileId" help:"File ID"`
+	PermissionID string `arg:"" name:"permissionId" help:"Permission ID"`
+}
+
+func (c *DriveUnshareCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	fileID := strings.TrimSpace(c.FileID)
+	permissionID := strings.TrimSpace(c.PermissionID)
+	if fileID == "" {
+		return usage("empty fileId")
+	}
+	if permissionID == "" {
+		return usage("empty permissionId")
+	}
+
+	if confirmErr := confirmDestructive(ctx, flags, fmt.Sprintf("remove permission %s from drive file %s", permissionID, fileID)); confirmErr != nil {
+		return confirmErr
+	}
+
+	svc, err := newDriveService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	if err := svc.Permissions.Delete(fileID, permissionID).SupportsAllDrives(true).Context(ctx).Do(); err != nil {
+		return err
+	}
+
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{
+			"removed":      true,
+			"fileId":       fileID,
+			"permissionId": permissionID,
+		})
+	}
+
+	u.Out().Printf("removed\ttrue")
+	u.Out().Printf("file_id\t%s", fileID)
+	u.Out().Printf("permission_id\t%s", permissionID)
+	return nil
+}
+
+type DrivePermissionsCmd struct {
+	FileID string `arg:"" name:"fileId" help:"File ID"`
+	Max    int64  `name:"max" help:"Max results" default:"100"`
+	Page   string `name:"page" help:"Page token"`
+}
+
+func (c *DrivePermissionsCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	fileID := strings.TrimSpace(c.FileID)
+	if fileID == "" {
+		return usage("empty fileId")
+	}
+
+	svc, err := newDriveService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	call := svc.Permissions.List(fileID).
+		SupportsAllDrives(true).
+		Fields("nextPageToken, permissions(id, type, role, emailAddress)").
+		Context(ctx)
+	if c.Max > 0 {
+		call = call.PageSize(c.Max)
+	}
+	if strings.TrimSpace(c.Page) != "" {
+		call = call.PageToken(c.Page)
+	}
+
+	resp, err := call.Do()
+	if err != nil {
+		return err
+	}
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{
+			"fileId":          fileID,
+			"permissions":     resp.Permissions,
+			"permissionCount": len(resp.Permissions),
+			"nextPageToken":   resp.NextPageToken,
+		})
+	}
+	if len(resp.Permissions) == 0 {
+		u.Err().Println("No permissions")
+		return nil
+	}
+
+	w, flush := tableWriter(ctx)
+	defer flush()
+	fmt.Fprintln(w, "ID\tTYPE\tROLE\tEMAIL")
+	for _, p := range resp.Permissions {
+		email := p.EmailAddress
+		if email == "" {
+			email = "-"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Id, p.Type, p.Role, email)
+	}
+	printNextPageHint(u, resp.NextPageToken)
+	return nil
+}
+
+type DriveURLCmd struct {
+	FileIDs []string `arg:"" name:"fileId" help:"File IDs"`
+}
+
+func (c *DriveURLCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+
+	svc, err := newDriveService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	for _, id := range c.FileIDs {
+		link, err := driveWebLink(ctx, svc, id)
+		if err != nil {
+			return err
+		}
+		if outfmt.IsJSON(ctx) {
+			// collected below
+		} else {
+			u.Out().Printf("%s\t%s", id, link)
+		}
+	}
+	if outfmt.IsJSON(ctx) {
+		urls := make([]map[string]string, 0, len(c.FileIDs))
+		for _, id := range c.FileIDs {
+			link, err := driveWebLink(ctx, svc, id)
+			if err != nil {
+				return err
+			}
+			urls = append(urls, map[string]string{"id": id, "url": link})
+		}
+		return outfmt.WriteJSON(os.Stdout, map[string]any{"urls": urls})
+	}
+	return nil
 }
 
 func buildDriveListQuery(folderID string, userQuery string) string {

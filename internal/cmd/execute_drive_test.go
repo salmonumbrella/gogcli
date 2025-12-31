@@ -177,7 +177,7 @@ func TestDriveDownloadCmd_FileHasNoName(t *testing.T) {
 	}
 	newDriveService = func(context.Context, string) (*drive.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	var errBuf bytes.Buffer
 	u, err := ui.New(ui.Options{Stdout: io.Discard, Stderr: &errBuf, Color: "never"})
 	if err != nil {
@@ -186,10 +186,7 @@ func TestDriveDownloadCmd_FileHasNoName(t *testing.T) {
 	ctx := ui.WithUI(context.Background(), u)
 	ctx = outfmt.WithMode(ctx, outfmt.Mode{})
 
-	cmd := newDriveDownloadCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"id1", "--out", filepath.Join(t.TempDir(), "out.bin")})
-	if execErr := cmd.Execute(); execErr == nil || !strings.Contains(execErr.Error(), "file has no name") {
+	if execErr := runKong(t, &DriveDownloadCmd{}, []string{"id1", "--out", filepath.Join(t.TempDir(), "out.bin")}, ctx, flags); execErr == nil || !strings.Contains(execErr.Error(), "file has no name") {
 		t.Fatalf("expected file has no name error, got: %v", execErr)
 	}
 }

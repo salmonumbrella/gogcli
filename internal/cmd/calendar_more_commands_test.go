@@ -20,10 +20,7 @@ func TestCalendarMoreCommands_JSON(t *testing.T) {
 	t.Cleanup(func() { newCalendarService = origNew })
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasPrefix(path, "/calendar/v3") {
-			path = strings.TrimPrefix(path, "/calendar/v3")
-		}
+		path := strings.TrimPrefix(r.URL.Path, "/calendar/v3")
 		switch {
 		case path == "/users/me/calendarList" && r.Method == http.MethodGet:
 			w.Header().Set("Content-Type", "application/json")
@@ -87,7 +84,7 @@ func TestCalendarMoreCommands_JSON(t *testing.T) {
 	}
 	newCalendarService = func(context.Context, string) (*calendar.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com", Force: true}
+	flags := &RootFlags{Account: "a@b.com", Force: true}
 	u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 	if uiErr != nil {
 		t.Fatalf("ui.New: %v", uiErr)
@@ -96,50 +93,31 @@ func TestCalendarMoreCommands_JSON(t *testing.T) {
 	ctx = outfmt.WithMode(ctx, outfmt.Mode{JSON: true})
 
 	_ = captureStdout(t, func() {
-		cmd := newCalendarCalendarsCmd(flags)
-		cmd.SetContext(ctx)
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &CalendarCalendarsCmd{}, []string{}, ctx, flags); err != nil {
 			t.Fatalf("calendars: %v", err)
 		}
 	})
 
 	_ = captureStdout(t, func() {
-		cmd := newCalendarAclCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"cal1"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &CalendarAclCmd{}, []string{"cal1"}, ctx, flags); err != nil {
 			t.Fatalf("acl: %v", err)
 		}
 	})
 
 	_ = captureStdout(t, func() {
-		cmd := newCalendarEventCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"cal1", "evt1"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &CalendarEventCmd{}, []string{"cal1", "evt1"}, ctx, flags); err != nil {
 			t.Fatalf("event: %v", err)
 		}
 	})
 
 	_ = captureStdout(t, func() {
-		cmd := newCalendarCreateCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"cal1"})
-		_ = cmd.Flags().Set("summary", "Created")
-		_ = cmd.Flags().Set("from", "2025-01-01T12:00:00Z")
-		_ = cmd.Flags().Set("to", "2025-01-01T13:00:00Z")
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &CalendarCreateCmd{}, []string{"cal1", "--summary", "Created", "--from", "2025-01-01T12:00:00Z", "--to", "2025-01-01T13:00:00Z"}, ctx, flags); err != nil {
 			t.Fatalf("create: %v", err)
 		}
 	})
 
 	_ = captureStdout(t, func() {
-		cmd := newCalendarFreeBusyCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"cal1"})
-		_ = cmd.Flags().Set("from", "2025-01-01T00:00:00Z")
-		_ = cmd.Flags().Set("to", "2025-01-02T00:00:00Z")
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &CalendarFreeBusyCmd{}, []string{"cal1", "--from", "2025-01-01T00:00:00Z", "--to", "2025-01-02T00:00:00Z"}, ctx, flags); err != nil {
 			t.Fatalf("freebusy: %v", err)
 		}
 	})

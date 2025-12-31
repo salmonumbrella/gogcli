@@ -18,9 +18,7 @@ func TestAuthManageCmd_ServicesAndOptions(t *testing.T) {
 		return nil
 	}
 
-	cmd := newAuthManageCmd()
-	cmd.SetArgs([]string{"--services", "gmail,drive,gmail", "--force-consent", "--timeout", "2m"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &AuthManageCmd{}, []string{"--services", "gmail,drive,gmail", "--force-consent", "--timeout", "2m"}, context.Background(), nil); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 
@@ -40,9 +38,7 @@ func TestAuthManageCmd_InvalidService(t *testing.T) {
 	t.Cleanup(func() { startManageServer = orig })
 	startManageServer = func(context.Context, googleauth.ManageServerOptions) error { return nil }
 
-	cmd := newAuthManageCmd()
-	cmd.SetArgs([]string{"--services", "nope"})
-	if err := cmd.Execute(); err == nil {
+	if err := runKong(t, &AuthManageCmd{}, []string{"--services", "nope"}, context.Background(), nil); err == nil {
 		t.Fatalf("expected error")
 	}
 }

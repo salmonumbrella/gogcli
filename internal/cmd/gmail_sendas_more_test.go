@@ -54,7 +54,7 @@ func TestGmailSendAs_VerifyDeleteUpdate_JSON(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 	if uiErr != nil {
 		t.Fatalf("ui.New: %v", uiErr)
@@ -64,34 +64,27 @@ func TestGmailSendAs_VerifyDeleteUpdate_JSON(t *testing.T) {
 
 	// verify
 	_ = captureStdout(t, func() {
-		cmd := newGmailSendAsVerifyCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"work@company.com"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailSendAsVerifyCmd{}, []string{"work@company.com"}, ctx, flags); err != nil {
 			t.Fatalf("verify: %v", err)
 		}
 	})
 
 	// update
 	_ = captureStdout(t, func() {
-		cmd := newGmailSendAsUpdateCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"work@company.com"})
-		_ = cmd.Flags().Set("display-name", "Work Alias")
-		_ = cmd.Flags().Set("reply-to", "reply@company.com")
-		_ = cmd.Flags().Set("signature", "Sig")
-		_ = cmd.Flags().Set("treat-as-alias", "true")
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailSendAsUpdateCmd{}, []string{
+			"work@company.com",
+			"--display-name", "Work Alias",
+			"--reply-to", "reply@company.com",
+			"--signature", "Sig",
+			"--treat-as-alias=true",
+		}, ctx, flags); err != nil {
 			t.Fatalf("update: %v", err)
 		}
 	})
 
 	// delete
 	_ = captureStdout(t, func() {
-		cmd := newGmailSendAsDeleteCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"work@company.com"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailSendAsDeleteCmd{}, []string{"work@company.com"}, ctx, flags); err != nil {
 			t.Fatalf("delete: %v", err)
 		}
 	})

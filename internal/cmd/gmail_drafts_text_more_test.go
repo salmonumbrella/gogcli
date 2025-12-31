@@ -51,7 +51,7 @@ func TestGmailDraftsCreateDelete_Text(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com", Force: true}
+	flags := &RootFlags{Account: "a@b.com", Force: true}
 
 	out := captureStdout(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: os.Stdout, Stderr: io.Discard, Color: "never"})
@@ -60,19 +60,15 @@ func TestGmailDraftsCreateDelete_Text(t *testing.T) {
 		}
 		ctx := ui.WithUI(context.Background(), u)
 
-		cmd := newGmailDraftsCreateCmd(flags)
-		cmd.SetContext(ctx)
-		_ = cmd.Flags().Set("to", "b@b.com")
-		_ = cmd.Flags().Set("subject", "Hi")
-		_ = cmd.Flags().Set("body", "Body")
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailDraftsCreateCmd{}, []string{
+			"--to", "b@b.com",
+			"--subject", "Hi",
+			"--body", "Body",
+		}, ctx, flags); err != nil {
 			t.Fatalf("create: %v", err)
 		}
 
-		cmd = newGmailDraftsDeleteCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"d1"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailDraftsDeleteCmd{}, []string{"d1"}, ctx, flags); err != nil {
 			t.Fatalf("delete: %v", err)
 		}
 	})

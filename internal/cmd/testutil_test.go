@@ -1,9 +1,13 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"io"
 	"os"
 	"testing"
+
+	"github.com/alecthomas/kong"
 )
 
 func captureStdout(t *testing.T, fn func()) string {
@@ -61,4 +65,45 @@ func withStdin(t *testing.T, input string, fn func()) {
 
 	_ = r.Close()
 	os.Stdin = orig
+}
+
+func runKong(t *testing.T, cmd any, args []string, ctx context.Context, flags *RootFlags) (err error) {
+	t.Helper()
+
+	parser, err := kong.New(
+		cmd,
+		kong.Writers(io.Discard, io.Discard),
+		kong.Exit(func(code int) { panic(exitPanic{code: code}) }),
+	)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			if ep, ok := r.(exitPanic); ok {
+				if ep.code == 0 {
+					err = nil
+					return
+				}
+				err = &ExitError{Code: ep.code, Err: errors.New("exited")}
+				return
+			}
+			panic(r)
+		}
+	}()
+
+	kctx, err := parser.Parse(args)
+	if err != nil {
+		return err
+	}
+
+	if ctx != nil {
+		kctx.BindTo(ctx, (*context.Context)(nil))
+	}
+	if flags != nil {
+		kctx.Bind(flags)
+	}
+
+	return kctx.Run()
 }

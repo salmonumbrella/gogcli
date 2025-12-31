@@ -1,11 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/steipete/gogcli/internal/outfmt"
 )
 
@@ -32,21 +32,16 @@ func VersionString() string {
 	return fmt.Sprintf("%s (%s %s)", v, strings.TrimSpace(commit), strings.TrimSpace(date))
 }
 
-func newVersionCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "version",
-		Short: "Print version",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{
-					"version": strings.TrimSpace(version),
-					"commit":  strings.TrimSpace(commit),
-					"date":    strings.TrimSpace(date),
-				})
-			}
-			fmt.Fprintln(os.Stdout, VersionString())
-			return nil
-		},
+type VersionCmd struct{}
+
+func (c *VersionCmd) Run(ctx context.Context) error {
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{
+			"version": strings.TrimSpace(version),
+			"commit":  strings.TrimSpace(commit),
+			"date":    strings.TrimSpace(date),
+		})
 	}
+	fmt.Fprintln(os.Stdout, VersionString())
+	return nil
 }

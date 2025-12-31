@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -78,7 +79,8 @@ func TestReadClientCredentials_Errors(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error")
 	}
-	if _, ok := err.(*CredentialsMissingError); !ok {
+	var missingErr *CredentialsMissingError
+	if !errors.As(err, &missingErr) {
 		t.Fatalf("expected CredentialsMissingError, got %T", err)
 	}
 

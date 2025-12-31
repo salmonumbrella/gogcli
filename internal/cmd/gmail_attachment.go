@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -8,90 +9,82 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/steipete/gogcli/internal/config"
 	"github.com/steipete/gogcli/internal/outfmt"
 	"github.com/steipete/gogcli/internal/ui"
 	"google.golang.org/api/gmail/v1"
 )
 
-func newGmailAttachmentCmd(flags *rootFlags) *cobra.Command {
-	var outPath string
-	var name string
+type GmailAttachmentCmd struct {
+	MessageID    string `arg:"" name:"messageId" help:"Message ID"`
+	AttachmentID string `arg:"" name:"attachmentId" help:"Attachment ID"`
+	Out          string `name:"out" help:"Write to a specific path (default: gogcli config dir)"`
+	Name         string `name:"name" help:"Filename (only used when --out is empty)"`
+}
 
-	cmd := &cobra.Command{
-		Use:   "attachment <messageId> <attachmentId>",
-		Short: "Download a single attachment",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			messageID := strings.TrimSpace(args[0])
-			attachmentID := strings.TrimSpace(args[1])
-			if messageID == "" || attachmentID == "" {
-				return usage("messageId/attachmentId required")
-			}
-
-			svc, err := newGmailService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			if strings.TrimSpace(outPath) == "" {
-				dir, dirErr := config.EnsureGmailAttachmentsDir()
-				if dirErr != nil {
-					return dirErr
-				}
-				filename := strings.TrimSpace(name)
-				if filename == "" {
-					filename = "attachment.bin"
-				}
-				safeFilename := filepath.Base(filename)
-				if safeFilename == "" || safeFilename == "." || safeFilename == ".." {
-					safeFilename = "attachment.bin"
-				}
-				shortID := attachmentID
-				if len(shortID) > 8 {
-					shortID = shortID[:8]
-				}
-				destPath := filepath.Join(dir, fmt.Sprintf("%s_%s_%s", messageID, shortID, safeFilename))
-				path, cached, bytes, dlErr := downloadAttachmentToPath(cmd, svc, messageID, attachmentID, destPath, -1)
-				if dlErr != nil {
-					return dlErr
-				}
-				if outfmt.IsJSON(cmd.Context()) {
-					return outfmt.WriteJSON(os.Stdout, map[string]any{"path": path, "cached": cached, "bytes": bytes})
-				}
-				u.Out().Printf("path\t%s", path)
-				u.Out().Printf("cached\t%t", cached)
-				u.Out().Printf("bytes\t%d", bytes)
-				return nil
-			}
-
-			path, cached, bytes, err := downloadAttachmentToPath(cmd, svc, messageID, attachmentID, outPath, -1)
-			if err != nil {
-				return err
-			}
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{"path": path, "cached": cached, "bytes": bytes})
-			}
-			u.Out().Printf("path\t%s", path)
-			u.Out().Printf("cached\t%t", cached)
-			u.Out().Printf("bytes\t%d", bytes)
-			return nil
-		},
+func (c *GmailAttachmentCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	messageID := strings.TrimSpace(c.MessageID)
+	attachmentID := strings.TrimSpace(c.AttachmentID)
+	if messageID == "" || attachmentID == "" {
+		return usage("messageId/attachmentId required")
 	}
 
-	cmd.Flags().StringVar(&outPath, "out", "", "Write to a specific path (default: gogcli config dir)")
-	cmd.Flags().StringVar(&name, "name", "", "Filename (only used when --out is empty)")
-	return cmd
+	svc, err := newGmailService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	if strings.TrimSpace(c.Out) == "" {
+		dir, dirErr := config.EnsureGmailAttachmentsDir()
+		if dirErr != nil {
+			return dirErr
+		}
+		filename := strings.TrimSpace(c.Name)
+		if filename == "" {
+			filename = "attachment.bin"
+		}
+		safeFilename := filepath.Base(filename)
+		if safeFilename == "" || safeFilename == "." || safeFilename == ".." {
+			safeFilename = "attachment.bin"
+		}
+		shortID := attachmentID
+		if len(shortID) > 8 {
+			shortID = shortID[:8]
+		}
+		destPath := filepath.Join(dir, fmt.Sprintf("%s_%s_%s", messageID, shortID, safeFilename))
+		path, cached, bytes, dlErr := downloadAttachmentToPath(ctx, svc, messageID, attachmentID, destPath, -1)
+		if dlErr != nil {
+			return dlErr
+		}
+		if outfmt.IsJSON(ctx) {
+			return outfmt.WriteJSON(os.Stdout, map[string]any{"path": path, "cached": cached, "bytes": bytes})
+		}
+		u.Out().Printf("path\t%s", path)
+		u.Out().Printf("cached\t%t", cached)
+		u.Out().Printf("bytes\t%d", bytes)
+		return nil
+	}
+
+	path, cached, bytes, err := downloadAttachmentToPath(ctx, svc, messageID, attachmentID, c.Out, -1)
+	if err != nil {
+		return err
+	}
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{"path": path, "cached": cached, "bytes": bytes})
+	}
+	u.Out().Printf("path\t%s", path)
+	u.Out().Printf("cached\t%t", cached)
+	u.Out().Printf("bytes\t%d", bytes)
+	return nil
 }
 
 func downloadAttachmentToPath(
-	cmd *cobra.Command,
+	ctx context.Context,
 	svc *gmail.Service,
 	messageID string,
 	attachmentID string,
@@ -112,7 +105,7 @@ func downloadAttachmentToPath(
 		}
 	}
 
-	body, err := svc.Users.Messages.Attachments.Get("me", messageID, attachmentID).Context(cmd.Context()).Do()
+	body, err := svc.Users.Messages.Attachments.Get("me", messageID, attachmentID).Context(ctx).Do()
 	if err != nil {
 		return "", false, 0, err
 	}

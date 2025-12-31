@@ -20,10 +20,7 @@ func TestCalendarUpdateAndDelete(t *testing.T) {
 	t.Cleanup(func() { newCalendarService = origNew })
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasPrefix(path, "/calendar/v3") {
-			path = strings.TrimPrefix(path, "/calendar/v3")
-		}
+		path := strings.TrimPrefix(r.URL.Path, "/calendar/v3")
 		switch {
 		case strings.Contains(path, "/calendars/cal1/events/evt1") && r.Method == http.MethodGet:
 			w.Header().Set("Content-Type", "application/json")
@@ -63,7 +60,7 @@ func TestCalendarUpdateAndDelete(t *testing.T) {
 	}
 	newCalendarService = func(context.Context, string) (*calendar.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com", Force: true}
+	flags := &RootFlags{Account: "a@b.com", Force: true}
 	u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 	if uiErr != nil {
 		t.Fatalf("ui.New: %v", uiErr)
@@ -72,20 +69,15 @@ func TestCalendarUpdateAndDelete(t *testing.T) {
 	jsonCtx := outfmt.WithMode(ctx, outfmt.Mode{JSON: true})
 
 	// update requires changes
-	cmd := newCalendarUpdateCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"cal1", "evt1"})
-	if err := cmd.Execute(); err == nil {
+	updateCmd := &CalendarUpdateCmd{}
+	if err := runKong(t, updateCmd, []string{"cal1", "evt1"}, ctx, flags); err == nil {
 		t.Fatalf("expected no updates error")
 	}
 
 	// update json
 	jsonOut := captureStdout(t, func() {
-		cmd = newCalendarUpdateCmd(flags)
-		cmd.SetContext(jsonCtx)
-		cmd.SetArgs([]string{"cal1", "evt1"})
-		_ = cmd.Flags().Set("summary", "Updated")
-		if err := cmd.Execute(); err != nil {
+		updateCmd = &CalendarUpdateCmd{}
+		if err := runKong(t, updateCmd, []string{"cal1", "evt1", "--summary", "Updated"}, jsonCtx, flags); err != nil {
 			t.Fatalf("update: %v", err)
 		}
 	})
@@ -95,10 +87,8 @@ func TestCalendarUpdateAndDelete(t *testing.T) {
 
 	// delete json
 	_ = captureStdout(t, func() {
-		cmd = newCalendarDeleteCmd(flags)
-		cmd.SetContext(jsonCtx)
-		cmd.SetArgs([]string{"cal1", "evt1"})
-		if err := cmd.Execute(); err != nil {
+		deleteCmd := &CalendarDeleteCmd{}
+		if err := runKong(t, deleteCmd, []string{"cal1", "evt1"}, jsonCtx, flags); err != nil {
 			t.Fatalf("delete: %v", err)
 		}
 	})

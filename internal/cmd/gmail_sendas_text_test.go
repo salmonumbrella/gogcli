@@ -58,7 +58,7 @@ func TestGmailSendAsListCmd_Text(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
 	textOut := captureStdout(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: os.Stdout, Stderr: io.Discard, Color: "never"})
@@ -68,10 +68,7 @@ func TestGmailSendAsListCmd_Text(t *testing.T) {
 		ctx := ui.WithUI(context.Background(), u)
 		ctx = outfmt.WithMode(ctx, outfmt.Mode{})
 
-		cmd := newGmailSendAsListCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailSendAsListCmd{}, []string{}, ctx, flags); err != nil {
 			t.Fatalf("execute: %v", err)
 		}
 	})
@@ -108,7 +105,7 @@ func TestGmailSendAsListCmd_TextEmpty(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
 	errOut := captureStderr(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: os.Stderr, Color: "never"})
@@ -118,10 +115,7 @@ func TestGmailSendAsListCmd_TextEmpty(t *testing.T) {
 		ctx := ui.WithUI(context.Background(), u)
 		ctx = outfmt.WithMode(ctx, outfmt.Mode{})
 
-		cmd := newGmailSendAsListCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailSendAsListCmd{}, []string{}, ctx, flags); err != nil {
 			t.Fatalf("execute: %v", err)
 		}
 	})
@@ -164,7 +158,7 @@ func TestGmailSendAsGetCmd_Text(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
 	var outBuf bytes.Buffer
 	u, err := ui.New(ui.Options{Stdout: &outBuf, Stderr: io.Discard, Color: "never"})
@@ -174,10 +168,7 @@ func TestGmailSendAsGetCmd_Text(t *testing.T) {
 	ctx := ui.WithUI(context.Background(), u)
 	ctx = outfmt.WithMode(ctx, outfmt.Mode{})
 
-	cmd := newGmailSendAsGetCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"work@company.com"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &GmailSendAsGetCmd{}, []string{"work@company.com"}, ctx, flags); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 

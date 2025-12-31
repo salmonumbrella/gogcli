@@ -26,7 +26,7 @@ func TestExecute_Completion_Bash(t *testing.T) {
 		t.Fatalf("ReadFile: %v", err)
 	}
 	out := string(b)
-	if !strings.Contains(out, "complete") || !strings.Contains(out, "gog") {
+	if !strings.Contains(out, "not supported") || !strings.Contains(out, "bash") {
 		excerpt := out
 		if len(excerpt) > 200 {
 			excerpt = excerpt[:200]

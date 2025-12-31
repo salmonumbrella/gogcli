@@ -44,7 +44,7 @@ func TestGmailAutoForwardGetCmd_Text(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
 	out := captureStdout(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: os.Stdout, Stderr: io.Discard, Color: "never"})
@@ -54,10 +54,8 @@ func TestGmailAutoForwardGetCmd_Text(t *testing.T) {
 		ctx := ui.WithUI(context.Background(), u)
 		ctx = outfmt.WithMode(ctx, outfmt.Mode{})
 
-		cmd := newGmailAutoForwardGetCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{})
-		if err := cmd.Execute(); err != nil {
+		cmd := &GmailAutoForwardGetCmd{}
+		if err := runKong(t, cmd, []string{}, ctx, flags); err != nil {
 			t.Fatalf("execute: %v", err)
 		}
 	})
@@ -104,12 +102,10 @@ func TestGmailAutoForwardUpdateCmd_JSONAndValidation(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
-	cmd := newGmailAutoForwardUpdateCmd(flags)
-	cmd.SetContext(context.Background())
-	cmd.SetArgs([]string{"--disposition", "nope"})
-	if err := cmd.Execute(); err == nil {
+	cmd := &GmailAutoForwardUpdateCmd{}
+	if err := runKong(t, cmd, []string{"--disposition", "nope"}, context.Background(), flags); err == nil {
 		t.Fatalf("expected validation error")
 	}
 
@@ -121,10 +117,8 @@ func TestGmailAutoForwardUpdateCmd_JSONAndValidation(t *testing.T) {
 		ctx := ui.WithUI(context.Background(), u)
 		ctx = outfmt.WithMode(ctx, outfmt.Mode{JSON: true})
 
-		cmd2 := newGmailAutoForwardUpdateCmd(flags)
-		cmd2.SetContext(ctx)
-		cmd2.SetArgs([]string{"--enable", "--email", "new@example.com", "--disposition", "archive"})
-		if err := cmd2.Execute(); err != nil {
+		cmd2 := &GmailAutoForwardUpdateCmd{}
+		if err := runKong(t, cmd2, []string{"--enable", "--email", "new@example.com", "--disposition", "archive"}, ctx, flags); err != nil {
 			t.Fatalf("execute: %v", err)
 		}
 	})

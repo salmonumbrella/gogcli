@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func requireAccount(flags *rootFlags) (string, error) {
+func requireAccount(flags *RootFlags) (string, error) {
 	if v := strings.TrimSpace(flags.Account); v != "" {
 		return v, nil
 	}

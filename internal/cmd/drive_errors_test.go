@@ -7,46 +7,34 @@ import (
 )
 
 func TestDriveCommand_ValidationErrors(t *testing.T) {
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
-	cmd := newDriveMoveCmd(flags)
-	cmd.SetContext(context.Background())
-	cmd.SetArgs([]string{"file1"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "missing --parent") {
+	moveCmd := &DriveMoveCmd{}
+	if err := runKong(t, moveCmd, []string{"file1"}, context.Background(), flags); err == nil || !strings.Contains(err.Error(), "missing --parent") {
 		t.Fatalf("expected parent error, got %v", err)
 	}
 
-	cmd = newDriveShareCmd(flags)
-	cmd.SetContext(context.Background())
-	cmd.SetArgs([]string{"file1"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "must specify") {
+	shareCmd := &DriveShareCmd{}
+	if err := runKong(t, shareCmd, []string{"file1"}, context.Background(), flags); err == nil || !strings.Contains(err.Error(), "must specify") {
 		t.Fatalf("expected share validation error, got %v", err)
 	}
 
-	cmd = newDriveShareCmd(flags)
-	cmd.SetContext(context.Background())
-	cmd.SetArgs([]string{"file1"})
-	_ = cmd.Flags().Set("anyone", "true")
-	_ = cmd.Flags().Set("role", "owner")
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "invalid --role") {
+	shareCmd = &DriveShareCmd{}
+	if err := runKong(t, shareCmd, []string{"file1", "--anyone", "--role", "owner"}, context.Background(), flags); err == nil || !strings.Contains(err.Error(), "invalid --role") {
 		t.Fatalf("expected role error, got %v", err)
 	}
 }
 
 func TestDriveDeleteUnshare_NoInput(t *testing.T) {
-	flags := &rootFlags{Account: "a@b.com", NoInput: true}
+	flags := &RootFlags{Account: "a@b.com", NoInput: true}
 
-	cmd := newDriveDeleteCmd(flags)
-	cmd.SetContext(context.Background())
-	cmd.SetArgs([]string{"file1"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "refusing") {
+	deleteCmd := &DriveDeleteCmd{}
+	if err := runKong(t, deleteCmd, []string{"file1"}, context.Background(), flags); err == nil || !strings.Contains(err.Error(), "refusing") {
 		t.Fatalf("expected refusing error, got %v", err)
 	}
 
-	cmd = newDriveUnshareCmd(flags)
-	cmd.SetContext(context.Background())
-	cmd.SetArgs([]string{"file1", "perm1"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "refusing") {
+	unshareCmd := &DriveUnshareCmd{}
+	if err := runKong(t, unshareCmd, []string{"file1", "perm1"}, context.Background(), flags); err == nil || !strings.Contains(err.Error(), "refusing") {
 		t.Fatalf("expected refusing error, got %v", err)
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/steipete/gogcli/internal/googleapi"
 	"github.com/steipete/gogcli/internal/outfmt"
 	"github.com/steipete/gogcli/internal/ui"
@@ -18,100 +17,90 @@ import (
 
 var newGmailService = googleapi.NewGmail
 
-func newGmailCmd(flags *rootFlags) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "gmail",
-		Short: "Gmail",
-	}
-	cmd.AddCommand(newGmailSearchCmd(flags))
-	cmd.AddCommand(newGmailThreadCmd(flags))
-	cmd.AddCommand(newGmailGetCmd(flags))
-	cmd.AddCommand(newGmailAttachmentCmd(flags))
-	cmd.AddCommand(newGmailURLCmd(flags))
-	cmd.AddCommand(newGmailLabelsCmd(flags))
-	cmd.AddCommand(newGmailSendCmd(flags))
-	cmd.AddCommand(newGmailDraftsCmd(flags))
-	cmd.AddCommand(newGmailWatchCmd(flags))
-	cmd.AddCommand(newGmailHistoryCmd(flags))
-	cmd.AddCommand(newGmailAutoForwardCmd(flags))
-	cmd.AddCommand(newGmailBatchCmd(flags))
-	cmd.AddCommand(newGmailDelegatesCmd(flags))
-	cmd.AddCommand(newGmailFiltersCmd(flags))
-	cmd.AddCommand(newGmailForwardingCmd(flags))
-	cmd.AddCommand(newGmailSendAsCmd(flags))
-	cmd.AddCommand(newGmailVacationCmd(flags))
-	return cmd
+type GmailCmd struct {
+	Search      GmailSearchCmd      `cmd:"" name:"search" help:"Search threads using Gmail query syntax"`
+	Thread      GmailThreadCmd      `cmd:"" name:"thread" help:"Thread operations (get, modify)"`
+	Get         GmailGetCmd         `cmd:"" name:"get" help:"Get a message (full|metadata|raw)"`
+	Attachment  GmailAttachmentCmd  `cmd:"" name:"attachment" help:"Download a single attachment"`
+	URL         GmailURLCmd         `cmd:"" name:"url" help:"Print Gmail web URLs for threads"`
+	Labels      GmailLabelsCmd      `cmd:"" name:"labels" help:"Label operations"`
+	Send        GmailSendCmd        `cmd:"" name:"send" help:"Send an email"`
+	Drafts      GmailDraftsCmd      `cmd:"" name:"drafts" help:"Draft operations"`
+	Watch       GmailWatchCmd       `cmd:"" name:"watch" help:"Manage Gmail watch"`
+	History     GmailHistoryCmd     `cmd:"" name:"history" help:"Gmail history"`
+	AutoForward GmailAutoForwardCmd `cmd:"" name:"autoforward" help:"Auto-forwarding settings"`
+	Batch       GmailBatchCmd       `cmd:"" name:"batch" help:"Batch operations"`
+	Delegates   GmailDelegatesCmd   `cmd:"" name:"delegates" help:"Delegate operations"`
+	Filters     GmailFiltersCmd     `cmd:"" name:"filters" help:"Filter operations"`
+	Forwarding  GmailForwardingCmd  `cmd:"" name:"forwarding" help:"Forwarding addresses"`
+	SendAs      GmailSendAsCmd      `cmd:"" name:"sendas" help:"Send-as settings"`
+	Vacation    GmailVacationCmd    `cmd:"" name:"vacation" help:"Vacation responder"`
 }
 
-func newGmailSearchCmd(flags *rootFlags) *cobra.Command {
-	var max int64
-	var page string
+type GmailSearchCmd struct {
+	Query []string `arg:"" name:"query" help:"Search query"`
+	Max   int64    `name:"max" help:"Max results" default:"10"`
+	Page  string   `name:"page" help:"Page token"`
+}
 
-	cmd := &cobra.Command{
-		Use:   "search <query>",
-		Short: "Search threads using Gmail query syntax",
-		Args:  cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			query := strings.Join(args, " ")
-
-			svc, err := newGmailService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			resp, err := svc.Users.Threads.List("me").
-				Q(query).
-				MaxResults(max).
-				PageToken(page).
-				Context(cmd.Context()).
-				Do()
-			if err != nil {
-				return err
-			}
-
-			idToName, err := fetchLabelIDToName(svc)
-			if err != nil {
-				return err
-			}
-
-			// Fetch thread details concurrently (fixes N+1 query pattern)
-			items, err := fetchThreadDetails(cmd.Context(), svc, resp.Threads, idToName)
-			if err != nil {
-				return err
-			}
-
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{
-					"threads":       items,
-					"nextPageToken": resp.NextPageToken,
-				})
-			}
-
-			if len(items) == 0 {
-				u.Err().Println("No results")
-				return nil
-			}
-
-			w, flush := tableWriter(cmd.Context())
-			defer flush()
-
-			fmt.Fprintln(w, "ID\tDATE\tFROM\tSUBJECT\tLABELS")
-			for _, it := range items {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", it.ID, it.Date, it.From, it.Subject, strings.Join(it.Labels, ","))
-			}
-			printNextPageHint(u, resp.NextPageToken)
-			return nil
-		},
+func (c *GmailSearchCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	query := strings.TrimSpace(strings.Join(c.Query, " "))
+	if query == "" {
+		return usage("missing query")
 	}
 
-	cmd.Flags().Int64Var(&max, "max", 10, "Max results")
-	cmd.Flags().StringVar(&page, "page", "", "Page token")
-	return cmd
+	svc, err := newGmailService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	resp, err := svc.Users.Threads.List("me").
+		Q(query).
+		MaxResults(c.Max).
+		PageToken(c.Page).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return err
+	}
+
+	idToName, err := fetchLabelIDToName(svc)
+	if err != nil {
+		return err
+	}
+
+	// Fetch thread details concurrently (fixes N+1 query pattern)
+	items, err := fetchThreadDetails(ctx, svc, resp.Threads, idToName)
+	if err != nil {
+		return err
+	}
+
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{
+			"threads":       items,
+			"nextPageToken": resp.NextPageToken,
+		})
+	}
+
+	if len(items) == 0 {
+		u.Err().Println("No results")
+		return nil
+	}
+
+	w, flush := tableWriter(ctx)
+	defer flush()
+
+	fmt.Fprintln(w, "ID\tDATE\tFROM\tSUBJECT\tLABELS")
+	for _, it := range items {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", it.ID, it.Date, it.From, it.Subject, strings.Join(it.Labels, ","))
+	}
+	printNextPageHint(u, resp.NextPageToken)
+	return nil
 }
 
 func firstMessage(t *gmail.Thread) *gmail.Message {
@@ -142,10 +131,6 @@ func formatGmailDate(raw string) string {
 		return t.Format("2006-01-02 15:04")
 	}
 	return raw
-}
-
-func sanitizeTab(s string) string {
-	return strings.ReplaceAll(s, "\t", " ")
 }
 
 func mailParseDate(s string) (time.Time, error) {
@@ -238,23 +223,39 @@ func fetchThreadDetails(ctx context.Context, svc *gmail.Service, threads []*gmai
 	}()
 
 	// Collect results in order
-	items := make([]threadItem, len(threads))
-	validCount := 0
+	ordered := make([]threadItem, len(threads))
+	hasErr := false
 	for r := range results {
 		if r.err != nil {
-			return nil, r.err
+			hasErr = true
+			ordered[r.index] = threadItem{ID: "", Date: "", From: "", Subject: "", Labels: nil}
+			continue
 		}
-		items[r.index] = r.item
-		validCount++
+		ordered[r.index] = r.item
 	}
 
-	// Filter out empty items (from threads with empty IDs)
-	filtered := make([]threadItem, 0, validCount)
-	for _, item := range items {
+	if hasErr {
+		// Re-run sequentially to find and return the first actual error
+		for _, t := range threads {
+			if t.Id == "" {
+				continue
+			}
+			_, err := svc.Users.Threads.Get("me", t.Id).
+				Format("metadata").
+				MetadataHeaders("From", "Subject", "Date").
+				Context(ctx).
+				Do()
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	items := make([]threadItem, 0, len(ordered))
+	for _, item := range ordered {
 		if item.ID != "" {
-			filtered = append(filtered, item)
+			items = append(items, item)
 		}
 	}
-
-	return filtered, nil
+	return items, nil
 }

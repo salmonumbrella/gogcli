@@ -106,7 +106,7 @@ func TestGmailSettings_TextPaths(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
 	u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 	if uiErr != nil {
@@ -114,86 +114,57 @@ func TestGmailSettings_TextPaths(t *testing.T) {
 	}
 	ctx := ui.WithUI(context.Background(), u)
 
-	cmd := newGmailDelegatesListCmd(flags)
-	cmd.SetContext(ctx)
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &GmailDelegatesListCmd{}, []string{}, ctx, flags); err != nil {
 		t.Fatalf("delegates list: %v", err)
 	}
 
-	cmd = newGmailDelegatesGetCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"d@b.com"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &GmailDelegatesGetCmd{}, []string{"d@b.com"}, ctx, flags); err != nil {
 		t.Fatalf("delegates get: %v", err)
 	}
 
-	cmd = newGmailDelegatesAddCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"d@b.com"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &GmailDelegatesAddCmd{}, []string{"d@b.com"}, ctx, flags); err != nil {
 		t.Fatalf("delegates add: %v", err)
 	}
 
-	cmd = newGmailDelegatesRemoveCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"d@b.com"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &GmailDelegatesRemoveCmd{}, []string{"d@b.com"}, ctx, flags); err != nil {
 		t.Fatalf("delegates remove: %v", err)
 	}
 
-	cmd = newGmailForwardingListCmd(flags)
-	cmd.SetContext(ctx)
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &GmailForwardingListCmd{}, []string{}, ctx, flags); err != nil {
 		t.Fatalf("forwarding list: %v", err)
 	}
 
-	cmd = newGmailForwardingGetCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"f@b.com"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &GmailForwardingGetCmd{}, []string{"f@b.com"}, ctx, flags); err != nil {
 		t.Fatalf("forwarding get: %v", err)
 	}
 
-	cmd = newGmailForwardingCreateCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"f@b.com"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &GmailForwardingCreateCmd{}, []string{"f@b.com"}, ctx, flags); err != nil {
 		t.Fatalf("forwarding create: %v", err)
 	}
 
-	cmd = newGmailForwardingDeleteCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"f@b.com"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &GmailForwardingDeleteCmd{}, []string{"f@b.com"}, ctx, flags); err != nil {
 		t.Fatalf("forwarding delete: %v", err)
 	}
 
-	cmd = newGmailVacationGetCmd(flags)
-	cmd.SetContext(ctx)
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &GmailVacationGetCmd{}, []string{}, ctx, flags); err != nil {
 		t.Fatalf("vacation get: %v", err)
 	}
 
-	cmd = newGmailVacationUpdateCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{
+	if err := runKong(t, &GmailVacationUpdateCmd{}, []string{
 		"--enable",
 		"--subject", "S2",
 		"--body", "<b>hi</b>",
 		"--start", "2025-01-01T00:00:00Z",
 		"--end", "2025-01-02T00:00:00Z",
 		"--contacts-only",
-	})
-	if err := cmd.Execute(); err != nil {
+	}, ctx, flags); err != nil {
 		t.Fatalf("vacation update: %v", err)
 	}
 }
 
 func TestGmailVacationUpdate_EnableDisableConflict(t *testing.T) {
-	flags := &rootFlags{Account: "a@b.com"}
-	cmd := newGmailVacationUpdateCmd(flags)
-	cmd.SetArgs([]string{"--enable", "--disable"})
-	if err := cmd.Execute(); err == nil {
+	flags := &RootFlags{Account: "a@b.com"}
+	if err := runKong(t, &GmailVacationUpdateCmd{}, []string{"--enable", "--disable"}, context.Background(), flags); err == nil {
 		t.Fatalf("expected conflict error")
 	}
 }

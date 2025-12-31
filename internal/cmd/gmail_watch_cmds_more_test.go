@@ -69,7 +69,7 @@ func TestGmailWatchRenewAndStop_JSON(t *testing.T) {
 		return nil
 	})
 
-	flags := &rootFlags{Account: "a@b.com", Force: true}
+	flags := &RootFlags{Account: "a@b.com", Force: true}
 
 	_ = captureStdout(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: os.Stdout, Stderr: os.Stderr, Color: "never"})
@@ -79,16 +79,11 @@ func TestGmailWatchRenewAndStop_JSON(t *testing.T) {
 		ctx := ui.WithUI(context.Background(), u)
 		ctx = outfmt.WithMode(ctx, outfmt.Mode{JSON: true})
 
-		cmd := newGmailWatchRenewCmd(flags)
-		cmd.SetContext(ctx)
-		_ = cmd.Flags().Set("ttl", "3600")
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailWatchRenewCmd{}, []string{"--ttl", "3600"}, ctx, flags); err != nil {
 			t.Fatalf("renew: %v", err)
 		}
 
-		cmd = newGmailWatchStopCmd(flags)
-		cmd.SetContext(ctx)
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailWatchStopCmd{}, []string{}, ctx, flags); err != nil {
 			t.Fatalf("stop: %v", err)
 		}
 	})
@@ -138,7 +133,7 @@ func TestGmailWatchStatusAndStop_Text(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com", Force: true}
+	flags := &RootFlags{Account: "a@b.com", Force: true}
 	out := captureStdout(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: os.Stdout, Stderr: io.Discard, Color: "never"})
 		if uiErr != nil {
@@ -146,15 +141,11 @@ func TestGmailWatchStatusAndStop_Text(t *testing.T) {
 		}
 		ctx := ui.WithUI(context.Background(), u)
 
-		cmd := newGmailWatchStatusCmd(flags)
-		cmd.SetContext(ctx)
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailWatchStatusCmd{}, []string{}, ctx, flags); err != nil {
 			t.Fatalf("status: %v", err)
 		}
 
-		cmd = newGmailWatchStopCmd(flags)
-		cmd.SetContext(ctx)
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailWatchStopCmd{}, []string{}, ctx, flags); err != nil {
 			t.Fatalf("stop: %v", err)
 		}
 	})

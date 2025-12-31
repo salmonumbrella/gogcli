@@ -46,7 +46,7 @@ func TestContactsListAndGet_NoResults_Text(t *testing.T) {
 	}
 	newPeopleContactsService = func(context.Context, string) (*people.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	errOut := captureStderr(t, func() {
 		_ = captureStdout(t, func() {
 			u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: os.Stderr, Color: "never"})
@@ -55,16 +55,11 @@ func TestContactsListAndGet_NoResults_Text(t *testing.T) {
 			}
 			ctx := ui.WithUI(context.Background(), u)
 
-			cmd := newContactsListCmd(flags)
-			cmd.SetContext(ctx)
-			if err := cmd.Execute(); err != nil {
+			if err := runKong(t, &ContactsListCmd{}, []string{}, ctx, flags); err != nil {
 				t.Fatalf("list: %v", err)
 			}
 
-			cmd = newContactsGetCmd(flags)
-			cmd.SetContext(ctx)
-			cmd.SetArgs([]string{"missing@example.com"})
-			if err := cmd.Execute(); err != nil {
+			if err := runKong(t, &ContactsGetCmd{}, []string{"missing@example.com"}, ctx, flags); err != nil {
 				t.Fatalf("get: %v", err)
 			}
 		})
@@ -75,19 +70,13 @@ func TestContactsListAndGet_NoResults_Text(t *testing.T) {
 }
 
 func TestContactsUpdateDelete_InvalidResource(t *testing.T) {
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
-	cmd := newContactsUpdateCmd(flags)
-	cmd.SetContext(context.Background())
-	cmd.SetArgs([]string{"nope"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "resourceName must start") {
+	if err := runKong(t, &ContactsUpdateCmd{}, []string{"nope"}, context.Background(), flags); err == nil || !strings.Contains(err.Error(), "resourceName must start") {
 		t.Fatalf("expected resourceName error, got %v", err)
 	}
 
-	cmd = newContactsDeleteCmd(flags)
-	cmd.SetContext(context.Background())
-	cmd.SetArgs([]string{"nope"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "resourceName must start") {
+	if err := runKong(t, &ContactsDeleteCmd{}, []string{"nope"}, context.Background(), flags); err == nil || !strings.Contains(err.Error(), "resourceName must start") {
 		t.Fatalf("expected resourceName error, got %v", err)
 	}
 }

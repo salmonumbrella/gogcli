@@ -61,7 +61,7 @@ func TestDriveLsCmd_TextAndJSON(t *testing.T) {
 	}
 	newDriveService = func(context.Context, string) (*drive.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
 	// Text mode: table to stdout + next page hint to stderr.
 	var errBuf bytes.Buffer
@@ -73,10 +73,8 @@ func TestDriveLsCmd_TextAndJSON(t *testing.T) {
 	ctx = outfmt.WithMode(ctx, outfmt.Mode{})
 
 	textOut := captureStdout(t, func() {
-		cmd := newDriveLsCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{})
-		if execErr := cmd.Execute(); execErr != nil {
+		cmd := &DriveLsCmd{}
+		if execErr := runKong(t, cmd, []string{}, ctx, flags); execErr != nil {
 			t.Fatalf("execute: %v", execErr)
 		}
 	})
@@ -104,10 +102,8 @@ func TestDriveLsCmd_TextAndJSON(t *testing.T) {
 	ctx2 = outfmt.WithMode(ctx2, outfmt.Mode{JSON: true})
 
 	jsonOut := captureStdout(t, func() {
-		cmd := newDriveLsCmd(flags)
-		cmd.SetContext(ctx2)
-		cmd.SetArgs([]string{})
-		if execErr := cmd.Execute(); execErr != nil {
+		cmd := &DriveLsCmd{}
+		if execErr := runKong(t, cmd, []string{}, ctx2, flags); execErr != nil {
 			t.Fatalf("execute: %v", execErr)
 		}
 	})
@@ -136,10 +132,8 @@ func TestDriveLsCmd_TextAndJSON(t *testing.T) {
 	ctx3 = outfmt.WithMode(ctx3, outfmt.Mode{Plain: true})
 
 	plainOut := captureStdout(t, func() {
-		cmd := newDriveLsCmd(flags)
-		cmd.SetContext(ctx3)
-		cmd.SetArgs([]string{})
-		if execErr := cmd.Execute(); execErr != nil {
+		cmd := &DriveLsCmd{}
+		if execErr := runKong(t, cmd, []string{}, ctx3, flags); execErr != nil {
 			t.Fatalf("execute: %v", execErr)
 		}
 	})

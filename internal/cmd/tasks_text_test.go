@@ -81,81 +81,59 @@ func TestTasks_TextPaths(t *testing.T) {
 	}
 	newTasksService = func(context.Context, string) (*tasks.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com", Force: true}
+	flags := &RootFlags{Account: "a@b.com", Force: true}
 	u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 	if uiErr != nil {
 		t.Fatalf("ui.New: %v", uiErr)
 	}
 	ctx := ui.WithUI(context.Background(), u)
 
-	cmd := newTasksListsCmd(flags)
-	cmd.SetContext(ctx)
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &TasksListsListCmd{}, []string{}, ctx, flags); err != nil {
 		t.Fatalf("lists: %v", err)
 	}
 
-	cmd = newTasksListsCreateCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"My", "List"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &TasksListsCreateCmd{}, []string{"My", "List"}, ctx, flags); err != nil {
 		t.Fatalf("lists create: %v", err)
 	}
 
-	cmd = newTasksListCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"l1"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &TasksListCmd{}, []string{"l1"}, ctx, flags); err != nil {
 		t.Fatalf("list: %v", err)
 	}
 
-	cmd = newTasksAddCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"l1"})
-	cmd.Flags().Set("title", "Task")
-	cmd.Flags().Set("notes", "Notes")
-	cmd.Flags().Set("due", "2025-01-01T00:00:00Z")
-	cmd.Flags().Set("parent", "p1")
-	cmd.Flags().Set("previous", "p0")
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &TasksAddCmd{}, []string{
+		"l1",
+		"--title", "Task",
+		"--notes", "Notes",
+		"--due", "2025-01-01T00:00:00Z",
+		"--parent", "p1",
+		"--previous", "p0",
+	}, ctx, flags); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 
-	cmd = newTasksUpdateCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"l1", "t1"})
-	cmd.Flags().Set("title", "New title")
-	cmd.Flags().Set("notes", "New notes")
-	cmd.Flags().Set("due", "2025-01-02T00:00:00Z")
-	cmd.Flags().Set("status", "completed")
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &TasksUpdateCmd{}, []string{
+		"l1", "t1",
+		"--title", "New title",
+		"--notes", "New notes",
+		"--due", "2025-01-02T00:00:00Z",
+		"--status", "completed",
+	}, ctx, flags); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 
-	cmd = newTasksDoneCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"l1", "t1"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &TasksDoneCmd{}, []string{"l1", "t1"}, ctx, flags); err != nil {
 		t.Fatalf("done: %v", err)
 	}
 
-	cmd = newTasksUndoCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"l1", "t1"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &TasksUndoCmd{}, []string{"l1", "t1"}, ctx, flags); err != nil {
 		t.Fatalf("undo: %v", err)
 	}
 
-	cmd = newTasksDeleteCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"l1", "t1"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &TasksDeleteCmd{}, []string{"l1", "t1"}, ctx, flags); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
-	cmd = newTasksClearCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"l1"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &TasksClearCmd{}, []string{"l1"}, ctx, flags); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
 }
@@ -191,23 +169,18 @@ func TestTasksLists_NoItems(t *testing.T) {
 	}
 	newTasksService = func(context.Context, string) (*tasks.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 	if uiErr != nil {
 		t.Fatalf("ui.New: %v", uiErr)
 	}
 	ctx := ui.WithUI(context.Background(), u)
 
-	cmd := newTasksListsCmd(flags)
-	cmd.SetContext(ctx)
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &TasksListsListCmd{}, []string{}, ctx, flags); err != nil {
 		t.Fatalf("lists: %v", err)
 	}
 
-	cmd = newTasksListCmd(flags)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"l1"})
-	if err := cmd.Execute(); err != nil {
+	if err := runKong(t, &TasksListCmd{}, []string{"l1"}, ctx, flags); err != nil {
 		t.Fatalf("list: %v", err)
 	}
 }

@@ -21,13 +21,8 @@ func TestSheetsCommands_JSON(t *testing.T) {
 	t.Cleanup(func() { newSheetsService = origNew })
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasPrefix(path, "/sheets/v4") {
-			path = strings.TrimPrefix(path, "/sheets/v4")
-		}
-		if strings.HasPrefix(path, "/v4") {
-			path = strings.TrimPrefix(path, "/v4")
-		}
+		path := strings.TrimPrefix(r.URL.Path, "/sheets/v4")
+		path = strings.TrimPrefix(path, "/v4")
 		switch {
 		case strings.Contains(path, "/spreadsheets/s1/values/") && strings.Contains(path, ":append") && r.Method == http.MethodPost:
 			w.Header().Set("Content-Type", "application/json")
@@ -96,7 +91,7 @@ func TestSheetsCommands_JSON(t *testing.T) {
 	}
 	newSheetsService = func(context.Context, string) (*sheets.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 	if uiErr != nil {
 		t.Fatalf("ui.New: %v", uiErr)
@@ -105,58 +100,43 @@ func TestSheetsCommands_JSON(t *testing.T) {
 	ctx = outfmt.WithMode(ctx, outfmt.Mode{JSON: true})
 
 	_ = captureStdout(t, func() {
-		cmd := newSheetsGetCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"s1", "Sheet1!A1:B2"})
-		if err := cmd.Execute(); err != nil {
+		cmd := &SheetsGetCmd{}
+		if err := runKong(t, cmd, []string{"s1", "Sheet1!A1:B2"}, ctx, flags); err != nil {
 			t.Fatalf("get: %v", err)
 		}
 	})
 
 	_ = captureStdout(t, func() {
-		cmd := newSheetsUpdateCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"s1", "Sheet1!A1"})
-		_ = cmd.Flags().Set("values-json", `[["a","b"]]`)
-		if err := cmd.Execute(); err != nil {
+		cmd := &SheetsUpdateCmd{}
+		if err := runKong(t, cmd, []string{"s1", "Sheet1!A1", "--values-json", `[["a","b"]]`}, ctx, flags); err != nil {
 			t.Fatalf("update: %v", err)
 		}
 	})
 
 	_ = captureStdout(t, func() {
-		cmd := newSheetsAppendCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"s1", "Sheet1!A1"})
-		_ = cmd.Flags().Set("values-json", `[["a"]]`)
-		if err := cmd.Execute(); err != nil {
+		cmd := &SheetsAppendCmd{}
+		if err := runKong(t, cmd, []string{"s1", "Sheet1!A1", "--values-json", `[["a"]]`}, ctx, flags); err != nil {
 			t.Fatalf("append: %v", err)
 		}
 	})
 
 	_ = captureStdout(t, func() {
-		cmd := newSheetsClearCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"s1", "Sheet1!A1"})
-		if err := cmd.Execute(); err != nil {
+		cmd := &SheetsClearCmd{}
+		if err := runKong(t, cmd, []string{"s1", "Sheet1!A1"}, ctx, flags); err != nil {
 			t.Fatalf("clear: %v", err)
 		}
 	})
 
 	_ = captureStdout(t, func() {
-		cmd := newSheetsMetadataCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"s1"})
-		if err := cmd.Execute(); err != nil {
+		cmd := &SheetsMetadataCmd{}
+		if err := runKong(t, cmd, []string{"s1"}, ctx, flags); err != nil {
 			t.Fatalf("metadata: %v", err)
 		}
 	})
 
 	_ = captureStdout(t, func() {
-		cmd := newSheetsCreateCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"New Sheet"})
-		_ = cmd.Flags().Set("sheets", "Sheet1,Sheet2")
-		if err := cmd.Execute(); err != nil {
+		cmd := &SheetsCreateCmd{}
+		if err := runKong(t, cmd, []string{"New Sheet", "--sheets", "Sheet1,Sheet2"}, ctx, flags); err != nil {
 			t.Fatalf("create: %v", err)
 		}
 	})
@@ -167,13 +147,8 @@ func TestSheetsCommands_Text(t *testing.T) {
 	t.Cleanup(func() { newSheetsService = origNew })
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasPrefix(path, "/sheets/v4") {
-			path = strings.TrimPrefix(path, "/sheets/v4")
-		}
-		if strings.HasPrefix(path, "/v4") {
-			path = strings.TrimPrefix(path, "/v4")
-		}
+		path := strings.TrimPrefix(r.URL.Path, "/sheets/v4")
+		path = strings.TrimPrefix(path, "/v4")
 		switch {
 		case strings.Contains(path, "/spreadsheets/s1/values/") && strings.Contains(path, ":append") && r.Method == http.MethodPost:
 			w.Header().Set("Content-Type", "application/json")
@@ -242,7 +217,7 @@ func TestSheetsCommands_Text(t *testing.T) {
 	}
 	newSheetsService = func(context.Context, string) (*sheets.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
 	out := captureStdout(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: os.Stdout, Stderr: io.Discard, Color: "never"})
@@ -251,47 +226,27 @@ func TestSheetsCommands_Text(t *testing.T) {
 		}
 		ctx := ui.WithUI(context.Background(), u)
 
-		cmd := newSheetsGetCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"s1", "Sheet1!A1:B2"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &SheetsGetCmd{}, []string{"s1", "Sheet1!A1:B2"}, ctx, flags); err != nil {
 			t.Fatalf("get: %v", err)
 		}
 
-		cmd = newSheetsUpdateCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"s1", "Sheet1!A1"})
-		_ = cmd.Flags().Set("values-json", `[["a","b"]]`)
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &SheetsUpdateCmd{}, []string{"s1", "Sheet1!A1", "--values-json", `[["a","b"]]`}, ctx, flags); err != nil {
 			t.Fatalf("update: %v", err)
 		}
 
-		cmd = newSheetsAppendCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"s1", "Sheet1!A1"})
-		_ = cmd.Flags().Set("values-json", `[["a"]]`)
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &SheetsAppendCmd{}, []string{"s1", "Sheet1!A1", "--values-json", `[["a"]]`}, ctx, flags); err != nil {
 			t.Fatalf("append: %v", err)
 		}
 
-		cmd = newSheetsClearCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"s1", "Sheet1!A1"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &SheetsClearCmd{}, []string{"s1", "Sheet1!A1"}, ctx, flags); err != nil {
 			t.Fatalf("clear: %v", err)
 		}
 
-		cmd = newSheetsMetadataCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"s1"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &SheetsMetadataCmd{}, []string{"s1"}, ctx, flags); err != nil {
 			t.Fatalf("metadata: %v", err)
 		}
 
-		cmd = newSheetsCreateCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"New Sheet"})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &SheetsCreateCmd{}, []string{"New Sheet"}, ctx, flags); err != nil {
 			t.Fatalf("create: %v", err)
 		}
 	})

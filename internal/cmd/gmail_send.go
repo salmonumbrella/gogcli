@@ -1,141 +1,121 @@
 package cmd
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/steipete/gogcli/internal/outfmt"
 	"github.com/steipete/gogcli/internal/ui"
 	"google.golang.org/api/gmail/v1"
 )
 
-func newGmailSendCmd(flags *rootFlags) *cobra.Command {
-	var to string
-	var cc string
-	var bcc string
-	var subject string
-	var body string
-	var bodyHTML string
-	var replyToMessageID string
-	var replyTo string
-	var attach []string
-	var from string
-
-	cmd := &cobra.Command{
-		Use:   "send",
-		Short: "Send an email",
-		Long: `Send an email. Use --from to send from a configured send-as alias.
-
-To see available send-as aliases: gog gmail sendas list`,
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-
-			if strings.TrimSpace(to) == "" || strings.TrimSpace(subject) == "" {
-				return usage("required: --to, --subject")
-			}
-			if strings.TrimSpace(body) == "" && strings.TrimSpace(bodyHTML) == "" {
-				return usage("required: --body or --body-html")
-			}
-
-			svc, err := newGmailService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			// Determine the From address
-			fromAddr := account
-			if strings.TrimSpace(from) != "" {
-				// Validate that this is a configured send-as alias
-				var sa *gmail.SendAs
-				sa, err = svc.Users.Settings.SendAs.Get("me", from).Context(cmd.Context()).Do()
-				if err != nil {
-					return fmt.Errorf("invalid --from address %q: %w", from, err)
-				}
-				if sa.VerificationStatus != "accepted" {
-					return fmt.Errorf("--from address %q is not verified (status: %s)", from, sa.VerificationStatus)
-				}
-				fromAddr = from
-				// Include display name if set
-				if sa.DisplayName != "" {
-					fromAddr = sa.DisplayName + " <" + from + ">"
-				}
-			}
-
-			inReplyTo, references, threadID, err := replyHeaders(cmd, svc, replyToMessageID)
-			if err != nil {
-				return err
-			}
-
-			atts := make([]mailAttachment, 0, len(attach))
-			for _, p := range attach {
-				atts = append(atts, mailAttachment{Path: p})
-			}
-
-			raw, err := buildRFC822(mailOptions{
-				From:        fromAddr,
-				To:          splitCSV(to),
-				Cc:          splitCSV(cc),
-				Bcc:         splitCSV(bcc),
-				ReplyTo:     replyTo,
-				Subject:     subject,
-				Body:        body,
-				BodyHTML:    bodyHTML,
-				InReplyTo:   inReplyTo,
-				References:  references,
-				Attachments: atts,
-			})
-			if err != nil {
-				return err
-			}
-
-			msg := &gmail.Message{
-				Raw: base64.RawURLEncoding.EncodeToString(raw),
-			}
-			if threadID != "" {
-				msg.ThreadId = threadID
-			}
-
-			sent, err := svc.Users.Messages.Send("me", msg).Context(cmd.Context()).Do()
-			if err != nil {
-				return err
-			}
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{
-					"messageId": sent.Id,
-					"threadId":  sent.ThreadId,
-					"from":      fromAddr,
-				})
-			}
-			u.Out().Printf("message_id\t%s", sent.Id)
-			if sent.ThreadId != "" {
-				u.Out().Printf("thread_id\t%s", sent.ThreadId)
-			}
-			return nil
-		},
-	}
-
-	cmd.Flags().StringVar(&to, "to", "", "Recipients (comma-separated, required)")
-	cmd.Flags().StringVar(&cc, "cc", "", "CC recipients (comma-separated)")
-	cmd.Flags().StringVar(&bcc, "bcc", "", "BCC recipients (comma-separated)")
-	cmd.Flags().StringVar(&subject, "subject", "", "Subject (required)")
-	cmd.Flags().StringVar(&body, "body", "", "Body (plain text; required unless --body-html is set)")
-	cmd.Flags().StringVar(&bodyHTML, "body-html", "", "Body (HTML; optional)")
-	cmd.Flags().StringVar(&replyToMessageID, "reply-to-message-id", "", "Reply to Gmail message ID (sets In-Reply-To/References and thread)")
-	cmd.Flags().StringVar(&replyTo, "reply-to", "", "Reply-To header address")
-	cmd.Flags().StringSliceVar(&attach, "attach", nil, "Attachment file path (repeatable)")
-	cmd.Flags().StringVar(&from, "from", "", "Send from this email address (must be a verified send-as alias)")
-	return cmd
+type GmailSendCmd struct {
+	To               string   `name:"to" help:"Recipients (comma-separated, required)"`
+	Cc               string   `name:"cc" help:"CC recipients (comma-separated)"`
+	Bcc              string   `name:"bcc" help:"BCC recipients (comma-separated)"`
+	Subject          string   `name:"subject" help:"Subject (required)"`
+	Body             string   `name:"body" help:"Body (plain text; required unless --body-html is set)"`
+	BodyHTML         string   `name:"body-html" help:"Body (HTML; optional)"`
+	ReplyToMessageID string   `name:"reply-to-message-id" help:"Reply to Gmail message ID (sets In-Reply-To/References and thread)"`
+	ReplyTo          string   `name:"reply-to" help:"Reply-To header address"`
+	Attach           []string `name:"attach" help:"Attachment file path (repeatable)"`
+	From             string   `name:"from" help:"Send from this email address (must be a verified send-as alias)"`
 }
 
-func replyHeaders(cmd *cobra.Command, svc *gmail.Service, replyToMessageID string) (inReplyTo string, references string, threadID string, err error) {
+func (c *GmailSendCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+
+	if strings.TrimSpace(c.To) == "" || strings.TrimSpace(c.Subject) == "" {
+		return usage("required: --to, --subject")
+	}
+	if strings.TrimSpace(c.Body) == "" && strings.TrimSpace(c.BodyHTML) == "" {
+		return usage("required: --body or --body-html")
+	}
+
+	svc, err := newGmailService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	// Determine the From address
+	fromAddr := account
+	if strings.TrimSpace(c.From) != "" {
+		// Validate that this is a configured send-as alias
+		var sa *gmail.SendAs
+		sa, err = svc.Users.Settings.SendAs.Get("me", c.From).Context(ctx).Do()
+		if err != nil {
+			return fmt.Errorf("invalid --from address %q: %w", c.From, err)
+		}
+		if sa.VerificationStatus != "accepted" {
+			return fmt.Errorf("--from address %q is not verified (status: %s)", c.From, sa.VerificationStatus)
+		}
+		fromAddr = c.From
+		// Include display name if set
+		if sa.DisplayName != "" {
+			fromAddr = sa.DisplayName + " <" + c.From + ">"
+		}
+	}
+
+	inReplyTo, references, threadID, err := replyHeaders(ctx, svc, c.ReplyToMessageID)
+	if err != nil {
+		return err
+	}
+
+	atts := make([]mailAttachment, 0, len(c.Attach))
+	for _, p := range c.Attach {
+		atts = append(atts, mailAttachment{Path: p})
+	}
+
+	raw, err := buildRFC822(mailOptions{
+		From:        fromAddr,
+		To:          splitCSV(c.To),
+		Cc:          splitCSV(c.Cc),
+		Bcc:         splitCSV(c.Bcc),
+		ReplyTo:     c.ReplyTo,
+		Subject:     c.Subject,
+		Body:        c.Body,
+		BodyHTML:    c.BodyHTML,
+		InReplyTo:   inReplyTo,
+		References:  references,
+		Attachments: atts,
+	})
+	if err != nil {
+		return err
+	}
+
+	msg := &gmail.Message{
+		Raw: base64.RawURLEncoding.EncodeToString(raw),
+	}
+	if threadID != "" {
+		msg.ThreadId = threadID
+	}
+
+	sent, err := svc.Users.Messages.Send("me", msg).Context(ctx).Do()
+	if err != nil {
+		return err
+	}
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{
+			"messageId": sent.Id,
+			"threadId":  sent.ThreadId,
+			"from":      fromAddr,
+		})
+	}
+	u.Out().Printf("message_id\t%s", sent.Id)
+	if sent.ThreadId != "" {
+		u.Out().Printf("thread_id\t%s", sent.ThreadId)
+	}
+	return nil
+}
+
+func replyHeaders(ctx context.Context, svc *gmail.Service, replyToMessageID string) (inReplyTo string, references string, threadID string, err error) {
 	replyToMessageID = strings.TrimSpace(replyToMessageID)
 	if replyToMessageID == "" {
 		return "", "", "", nil
@@ -143,7 +123,7 @@ func replyHeaders(cmd *cobra.Command, svc *gmail.Service, replyToMessageID strin
 	msg, err := svc.Users.Messages.Get("me", replyToMessageID).
 		Format("metadata").
 		MetadataHeaders("Message-ID", "Message-Id", "References", "In-Reply-To").
-		Context(cmd.Context()).
+		Context(ctx).
 		Do()
 	if err != nil {
 		return "", "", "", err

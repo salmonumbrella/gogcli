@@ -32,10 +32,7 @@ func TestDocsCreateCopyCat_JSON(t *testing.T) {
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasPrefix(path, "/drive/v3") {
-			path = strings.TrimPrefix(path, "/drive/v3")
-		}
+		path := strings.TrimPrefix(r.URL.Path, "/drive/v3")
 		switch {
 		case strings.HasPrefix(path, "/files/") && r.Method == http.MethodGet:
 			w.Header().Set("Content-Type", "application/json")
@@ -79,7 +76,7 @@ func TestDocsCreateCopyCat_JSON(t *testing.T) {
 	}
 	newDriveService = func(context.Context, string) (*drive.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 	if uiErr != nil {
 		t.Fatalf("ui.New: %v", uiErr)
@@ -88,28 +85,22 @@ func TestDocsCreateCopyCat_JSON(t *testing.T) {
 	ctx = outfmt.WithMode(ctx, outfmt.Mode{JSON: true})
 
 	_ = captureStdout(t, func() {
-		cmd := newDocsCreateCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"Doc"})
-		if err := cmd.Execute(); err != nil {
+		cmd := &DocsCreateCmd{}
+		if err := runKong(t, cmd, []string{"Doc"}, ctx, flags); err != nil {
 			t.Fatalf("create: %v", err)
 		}
 	})
 
 	_ = captureStdout(t, func() {
-		cmd := newDocsCopyCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"doc1", "Copy"})
-		if err := cmd.Execute(); err != nil {
+		cmd := &DocsCopyCmd{}
+		if err := runKong(t, cmd, []string{"doc1", "Copy"}, ctx, flags); err != nil {
 			t.Fatalf("copy: %v", err)
 		}
 	})
 
 	out := captureStdout(t, func() {
-		cmd := newDocsCatCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"doc1"})
-		if err := cmd.Execute(); err != nil {
+		cmd := &DocsCatCmd{}
+		if err := runKong(t, cmd, []string{"doc1"}, ctx, flags); err != nil {
 			t.Fatalf("cat: %v", err)
 		}
 	})
@@ -134,10 +125,7 @@ func TestDocsCreateCopyCat_Text(t *testing.T) {
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasPrefix(path, "/drive/v3") {
-			path = strings.TrimPrefix(path, "/drive/v3")
-		}
+		path := strings.TrimPrefix(r.URL.Path, "/drive/v3")
 		switch {
 		case strings.HasPrefix(path, "/files/") && r.Method == http.MethodGet:
 			w.Header().Set("Content-Type", "application/json")
@@ -181,7 +169,7 @@ func TestDocsCreateCopyCat_Text(t *testing.T) {
 	}
 	newDriveService = func(context.Context, string) (*drive.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
 	out := captureStdout(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: os.Stdout, Stderr: io.Discard, Color: "never"})
@@ -190,24 +178,18 @@ func TestDocsCreateCopyCat_Text(t *testing.T) {
 		}
 		ctx := ui.WithUI(context.Background(), u)
 
-		cmd := newDocsCreateCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"Doc"})
-		if err := cmd.Execute(); err != nil {
+		createCmd := &DocsCreateCmd{}
+		if err := runKong(t, createCmd, []string{"Doc"}, ctx, flags); err != nil {
 			t.Fatalf("create: %v", err)
 		}
 
-		cmd = newDocsCopyCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"doc1", "Copy"})
-		if err := cmd.Execute(); err != nil {
+		copyCmd := &DocsCopyCmd{}
+		if err := runKong(t, copyCmd, []string{"doc1", "Copy"}, ctx, flags); err != nil {
 			t.Fatalf("copy: %v", err)
 		}
 
-		cmd = newDocsCatCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"doc1"})
-		if err := cmd.Execute(); err != nil {
+		catCmd := &DocsCatCmd{}
+		if err := runKong(t, catCmd, []string{"doc1"}, ctx, flags); err != nil {
 			t.Fatalf("cat: %v", err)
 		}
 	})

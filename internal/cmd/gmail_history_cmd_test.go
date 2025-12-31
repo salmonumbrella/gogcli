@@ -49,7 +49,7 @@ func TestGmailHistoryCmd_JSON(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	out := captureStdout(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 		if uiErr != nil {
@@ -58,10 +58,8 @@ func TestGmailHistoryCmd_JSON(t *testing.T) {
 		ctx := ui.WithUI(context.Background(), u)
 		ctx = outfmt.WithMode(ctx, outfmt.Mode{JSON: true})
 
-		cmd := newGmailHistoryCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"--since", "100"})
-		if err := cmd.Execute(); err != nil {
+		cmd := &GmailHistoryCmd{}
+		if err := runKong(t, cmd, []string{"--since", "100"}, ctx, flags); err != nil {
 			t.Fatalf("execute: %v", err)
 		}
 	})
@@ -106,7 +104,7 @@ func TestGmailHistoryCmd_NoHistory(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	errOut := captureStderr(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: os.Stderr, Color: "never"})
 		if uiErr != nil {
@@ -114,10 +112,8 @@ func TestGmailHistoryCmd_NoHistory(t *testing.T) {
 		}
 		ctx := ui.WithUI(context.Background(), u)
 
-		cmd := newGmailHistoryCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"--since", "100"})
-		if err := cmd.Execute(); err != nil {
+		cmd := &GmailHistoryCmd{}
+		if err := runKong(t, cmd, []string{"--since", "100"}, ctx, flags); err != nil {
 			t.Fatalf("execute: %v", err)
 		}
 	})

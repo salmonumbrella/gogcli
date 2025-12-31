@@ -1,12 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
+	"github.com/alecthomas/kong"
 	"github.com/steipete/gogcli/internal/googleapi"
 	"github.com/steipete/gogcli/internal/outfmt"
 	"github.com/steipete/gogcli/internal/ui"
@@ -15,195 +16,437 @@ import (
 
 var newCalendarService = googleapi.NewCalendar
 
-func newCalendarCmd(flags *rootFlags) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "calendar",
-		Short: "Google Calendar",
-	}
-	cmd.AddCommand(newCalendarCalendarsCmd(flags))
-	cmd.AddCommand(newCalendarAclCmd(flags))
-	cmd.AddCommand(newCalendarEventsCmd(flags))
-	cmd.AddCommand(newCalendarEventCmd(flags))
-	cmd.AddCommand(newCalendarCreateCmd(flags))
-	cmd.AddCommand(newCalendarUpdateCmd(flags))
-	cmd.AddCommand(newCalendarDeleteCmd(flags))
-	cmd.AddCommand(newCalendarFreeBusyCmd(flags))
-	cmd.AddCommand(newCalendarRespondCmd(flags))
-	cmd.AddCommand(newCalendarColorsCmd(flags))
-	cmd.AddCommand(newCalendarConflictsCmd(flags))
-	cmd.AddCommand(newCalendarSearchCmd(flags))
-	cmd.AddCommand(newCalendarTimeCmd(flags))
-	return cmd
+type CalendarCmd struct {
+	Calendars CalendarCalendarsCmd `cmd:"" name:"calendars" help:"List calendars"`
+	ACL       CalendarAclCmd       `cmd:"" name:"acl" help:"List calendar ACL"`
+	Events    CalendarEventsCmd    `cmd:"" name:"events" help:"List events from a calendar or all calendars"`
+	Event     CalendarEventCmd     `cmd:"" name:"event" help:"Get event"`
+	Create    CalendarCreateCmd    `cmd:"" name:"create" help:"Create an event"`
+	Update    CalendarUpdateCmd    `cmd:"" name:"update" help:"Update an event"`
+	Delete    CalendarDeleteCmd    `cmd:"" name:"delete" help:"Delete an event"`
+	FreeBusy  CalendarFreeBusyCmd  `cmd:"" name:"freebusy" help:"Get free/busy"`
+	Respond   CalendarRespondCmd   `cmd:"" name:"respond" help:"Respond to an event invitation"`
+	Colors    CalendarColorsCmd    `cmd:"" name:"colors" help:"Show calendar colors"`
+	Conflicts CalendarConflictsCmd `cmd:"" name:"conflicts" help:"Find conflicts"`
+	Search    CalendarSearchCmd    `cmd:"" name:"search" help:"Search events"`
+	Time      CalendarTimeCmd      `cmd:"" name:"time" help:"Show server time"`
 }
 
-func newCalendarCalendarsCmd(flags *rootFlags) *cobra.Command {
-	var max int64
-	var page string
-
-	cmd := &cobra.Command{
-		Use:   "calendars",
-		Short: "List calendars",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-
-			svc, err := newCalendarService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			resp, err := svc.CalendarList.List().MaxResults(max).PageToken(page).Do()
-			if err != nil {
-				return err
-			}
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{
-					"calendars":     resp.Items,
-					"nextPageToken": resp.NextPageToken,
-				})
-			}
-			if len(resp.Items) == 0 {
-				u.Err().Println("No calendars")
-				return nil
-			}
-
-			w, flush := tableWriter(cmd.Context())
-			defer flush()
-			fmt.Fprintln(w, "ID\tNAME\tROLE")
-			for _, c := range resp.Items {
-				fmt.Fprintf(w, "%s\t%s\t%s\n", c.Id, c.Summary, c.AccessRole)
-			}
-			printNextPageHint(u, resp.NextPageToken)
-			return nil
-		},
-	}
-
-	cmd.Flags().Int64Var(&max, "max", 100, "Max results")
-	cmd.Flags().StringVar(&page, "page", "", "Page token")
-	return cmd
+type CalendarCalendarsCmd struct {
+	Max  int64  `name:"max" help:"Max results" default:"100"`
+	Page string `name:"page" help:"Page token"`
 }
 
-func newCalendarAclCmd(flags *rootFlags) *cobra.Command {
-	var max int64
-	var page string
-
-	cmd := &cobra.Command{
-		Use:   "acl <calendarId>",
-		Short: "List access control rules for a calendar",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			calendarID := args[0]
-
-			svc, err := newCalendarService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			resp, err := svc.Acl.List(calendarID).MaxResults(max).PageToken(page).Do()
-			if err != nil {
-				return err
-			}
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{
-					"rules":         resp.Items,
-					"nextPageToken": resp.NextPageToken,
-				})
-			}
-			if len(resp.Items) == 0 {
-				u.Err().Println("No ACL rules")
-				return nil
-			}
-
-			w, flush := tableWriter(cmd.Context())
-			defer flush()
-			fmt.Fprintln(w, "SCOPE_TYPE\tSCOPE_VALUE\tROLE")
-			for _, rule := range resp.Items {
-				scopeType := ""
-				scopeValue := ""
-				if rule.Scope != nil {
-					scopeType = rule.Scope.Type
-					scopeValue = rule.Scope.Value
-				}
-				fmt.Fprintf(w, "%s\t%s\t%s\n", scopeType, scopeValue, rule.Role)
-			}
-			printNextPageHint(u, resp.NextPageToken)
-			return nil
-		},
+func (c *CalendarCalendarsCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
 	}
 
-	cmd.Flags().Int64Var(&max, "max", 100, "Max results")
-	cmd.Flags().StringVar(&page, "page", "", "Page token")
-	return cmd
-}
-
-func newCalendarEventsCmd(flags *rootFlags) *cobra.Command {
-	var from string
-	var to string
-	var max int64
-	var page string
-	var query string
-	var all bool
-
-	cmd := &cobra.Command{
-		Use:   "events [<calendarId>]",
-		Short: "List events from a calendar or all calendars",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-
-			// Validate args
-			if !all && len(args) == 0 {
-				return usage("calendarId required unless --all is specified")
-			}
-			if all && len(args) > 0 {
-				return usage("calendarId not allowed with --all flag")
-			}
-
-			now := time.Now().UTC()
-			oneWeekLater := now.Add(7 * 24 * time.Hour)
-			if strings.TrimSpace(from) == "" {
-				from = now.Format(time.RFC3339)
-			}
-			if strings.TrimSpace(to) == "" {
-				to = oneWeekLater.Format(time.RFC3339)
-			}
-
-			svc, err := newCalendarService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			if all {
-				return listAllCalendarsEvents(cmd, svc, from, to, max, page, query)
-			}
-			calendarID := args[0]
-			return listCalendarEvents(cmd, svc, calendarID, from, to, max, page, query)
-		},
+	svc, err := newCalendarService(ctx, account)
+	if err != nil {
+		return err
 	}
 
-	cmd.Flags().StringVar(&from, "from", "", "Start time (RFC3339; default: now)")
-	cmd.Flags().StringVar(&to, "to", "", "End time (RFC3339; default: +7d)")
-	cmd.Flags().Int64Var(&max, "max", 10, "Max results")
-	cmd.Flags().StringVar(&page, "page", "", "Page token")
-	cmd.Flags().StringVar(&query, "query", "", "Free text search")
-	cmd.Flags().BoolVar(&all, "all", false, "Fetch events from all calendars")
-	return cmd
+	resp, err := svc.CalendarList.List().MaxResults(c.Max).PageToken(c.Page).Do()
+	if err != nil {
+		return err
+	}
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{
+			"calendars":     resp.Items,
+			"nextPageToken": resp.NextPageToken,
+		})
+	}
+	if len(resp.Items) == 0 {
+		u.Err().Println("No calendars")
+		return nil
+	}
+
+	w, flush := tableWriter(ctx)
+	defer flush()
+	fmt.Fprintln(w, "ID\tNAME\tROLE")
+	for _, cal := range resp.Items {
+		fmt.Fprintf(w, "%s\t%s\t%s\n", cal.Id, cal.Summary, cal.AccessRole)
+	}
+	printNextPageHint(u, resp.NextPageToken)
+	return nil
 }
 
-func listCalendarEvents(cmd *cobra.Command, svc *calendar.Service, calendarID, from, to string, max int64, page, query string) error {
-	u := ui.FromContext(cmd.Context())
+type CalendarAclCmd struct {
+	CalendarID string `arg:"" name:"calendarId" help:"Calendar ID"`
+	Max        int64  `name:"max" help:"Max results" default:"100"`
+	Page       string `name:"page" help:"Page token"`
+}
+
+func (c *CalendarAclCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	calendarID := strings.TrimSpace(c.CalendarID)
+	if calendarID == "" {
+		return usage("calendarId required")
+	}
+
+	svc, err := newCalendarService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	resp, err := svc.Acl.List(calendarID).MaxResults(c.Max).PageToken(c.Page).Do()
+	if err != nil {
+		return err
+	}
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{
+			"rules":         resp.Items,
+			"nextPageToken": resp.NextPageToken,
+		})
+	}
+	if len(resp.Items) == 0 {
+		u.Err().Println("No ACL rules")
+		return nil
+	}
+
+	w, flush := tableWriter(ctx)
+	defer flush()
+	fmt.Fprintln(w, "SCOPE_TYPE\tSCOPE_VALUE\tROLE")
+	for _, rule := range resp.Items {
+		scopeType := ""
+		scopeValue := ""
+		if rule.Scope != nil {
+			scopeType = rule.Scope.Type
+			scopeValue = rule.Scope.Value
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\n", scopeType, scopeValue, rule.Role)
+	}
+	printNextPageHint(u, resp.NextPageToken)
+	return nil
+}
+
+type CalendarEventsCmd struct {
+	CalendarID string `arg:"" name:"calendarId" optional:"" help:"Calendar ID"`
+	From       string `name:"from" help:"Start time (RFC3339; default: now)"`
+	To         string `name:"to" help:"End time (RFC3339; default: +7d)"`
+	Max        int64  `name:"max" help:"Max results" default:"10"`
+	Page       string `name:"page" help:"Page token"`
+	Query      string `name:"query" help:"Free text search"`
+	All        bool   `name:"all" help:"Fetch events from all calendars"`
+}
+
+func (c *CalendarEventsCmd) Run(ctx context.Context, flags *RootFlags) error {
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+
+	if !c.All && strings.TrimSpace(c.CalendarID) == "" {
+		return usage("calendarId required unless --all is specified")
+	}
+	if c.All && strings.TrimSpace(c.CalendarID) != "" {
+		return usage("calendarId not allowed with --all flag")
+	}
+
+	now := time.Now().UTC()
+	oneWeekLater := now.Add(7 * 24 * time.Hour)
+	from := strings.TrimSpace(c.From)
+	to := strings.TrimSpace(c.To)
+	if from == "" {
+		from = now.Format(time.RFC3339)
+	}
+	if to == "" {
+		to = oneWeekLater.Format(time.RFC3339)
+	}
+
+	svc, err := newCalendarService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	if c.All {
+		return listAllCalendarsEvents(ctx, svc, from, to, c.Max, c.Page, c.Query)
+	}
+	calendarID := strings.TrimSpace(c.CalendarID)
+	return listCalendarEvents(ctx, svc, calendarID, from, to, c.Max, c.Page, c.Query)
+}
+
+type CalendarEventCmd struct {
+	CalendarID string `arg:"" name:"calendarId" help:"Calendar ID"`
+	EventID    string `arg:"" name:"eventId" help:"Event ID"`
+}
+
+func (c *CalendarEventCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	calendarID := strings.TrimSpace(c.CalendarID)
+	eventID := strings.TrimSpace(c.EventID)
+	if calendarID == "" {
+		return usage("empty calendarId")
+	}
+	if eventID == "" {
+		return usage("empty eventId")
+	}
+
+	svc, err := newCalendarService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	event, err := svc.Events.Get(calendarID, eventID).Do()
+	if err != nil {
+		return err
+	}
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{"event": event})
+	}
+	printCalendarEvent(u, event)
+	return nil
+}
+
+type CalendarCreateCmd struct {
+	CalendarID  string `arg:"" name:"calendarId" help:"Calendar ID"`
+	Summary     string `name:"summary" help:"Event summary/title"`
+	From        string `name:"from" help:"Start time (RFC3339)"`
+	To          string `name:"to" help:"End time (RFC3339)"`
+	Description string `name:"description" help:"Description"`
+	Location    string `name:"location" help:"Location"`
+	Attendees   string `name:"attendees" help:"Comma-separated attendee emails"`
+	AllDay      bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
+}
+
+func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	calendarID := strings.TrimSpace(c.CalendarID)
+	if calendarID == "" {
+		return usage("empty calendarId")
+	}
+
+	if strings.TrimSpace(c.Summary) == "" || strings.TrimSpace(c.From) == "" || strings.TrimSpace(c.To) == "" {
+		return usage("required: --summary, --from, --to")
+	}
+
+	svc, err := newCalendarService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	event := &calendar.Event{
+		Summary:     strings.TrimSpace(c.Summary),
+		Description: strings.TrimSpace(c.Description),
+		Location:    strings.TrimSpace(c.Location),
+		Start:       buildEventDateTime(c.From, c.AllDay),
+		End:         buildEventDateTime(c.To, c.AllDay),
+		Attendees:   buildAttendees(c.Attendees),
+	}
+
+	created, err := svc.Events.Insert(calendarID, event).Do()
+	if err != nil {
+		return err
+	}
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{"event": created})
+	}
+	printCalendarEvent(u, created)
+	return nil
+}
+
+type CalendarUpdateCmd struct {
+	CalendarID  string `arg:"" name:"calendarId" help:"Calendar ID"`
+	EventID     string `arg:"" name:"eventId" help:"Event ID"`
+	Summary     string `name:"summary" help:"New summary/title (set empty to clear)"`
+	From        string `name:"from" help:"New start time (RFC3339; set empty to clear)"`
+	To          string `name:"to" help:"New end time (RFC3339; set empty to clear)"`
+	Description string `name:"description" help:"New description (set empty to clear)"`
+	Location    string `name:"location" help:"New location (set empty to clear)"`
+	Attendees   string `name:"attendees" help:"Comma-separated attendee emails (set empty to clear)"`
+	AllDay      bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
+}
+
+func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	calendarID := strings.TrimSpace(c.CalendarID)
+	eventID := strings.TrimSpace(c.EventID)
+	if calendarID == "" {
+		return usage("empty calendarId")
+	}
+	if eventID == "" {
+		return usage("empty eventId")
+	}
+
+	// If --all-day changed, require from/to to update both date/time fields.
+	if flagProvided(kctx, "all-day") {
+		if !flagProvided(kctx, "from") || !flagProvided(kctx, "to") {
+			return usage("when changing --all-day, also provide --from and --to")
+		}
+	}
+
+	patch := &calendar.Event{}
+	changed := false
+	if flagProvided(kctx, "summary") {
+		patch.Summary = strings.TrimSpace(c.Summary)
+		changed = true
+	}
+	if flagProvided(kctx, "description") {
+		patch.Description = strings.TrimSpace(c.Description)
+		changed = true
+	}
+	if flagProvided(kctx, "location") {
+		patch.Location = strings.TrimSpace(c.Location)
+		changed = true
+	}
+	if flagProvided(kctx, "from") {
+		patch.Start = buildEventDateTime(c.From, c.AllDay)
+		changed = true
+	}
+	if flagProvided(kctx, "to") {
+		patch.End = buildEventDateTime(c.To, c.AllDay)
+		changed = true
+	}
+	if flagProvided(kctx, "attendees") {
+		patch.Attendees = buildAttendees(c.Attendees)
+		changed = true
+	}
+	if !changed {
+		return usage("no updates provided")
+	}
+
+	svc, err := newCalendarService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	updated, err := svc.Events.Patch(calendarID, eventID, patch).Do()
+	if err != nil {
+		return err
+	}
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{"event": updated})
+	}
+	printCalendarEvent(u, updated)
+	return nil
+}
+
+type CalendarDeleteCmd struct {
+	CalendarID string `arg:"" name:"calendarId" help:"Calendar ID"`
+	EventID    string `arg:"" name:"eventId" help:"Event ID"`
+}
+
+func (c *CalendarDeleteCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+	calendarID := strings.TrimSpace(c.CalendarID)
+	eventID := strings.TrimSpace(c.EventID)
+	if calendarID == "" {
+		return usage("empty calendarId")
+	}
+	if eventID == "" {
+		return usage("empty eventId")
+	}
+
+	if confirmErr := confirmDestructive(ctx, flags, fmt.Sprintf("delete event %s from calendar %s", eventID, calendarID)); confirmErr != nil {
+		return confirmErr
+	}
+
+	svc, err := newCalendarService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	if err := svc.Events.Delete(calendarID, eventID).Do(); err != nil {
+		return err
+	}
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{
+			"deleted":    true,
+			"calendarId": calendarID,
+			"eventId":    eventID,
+		})
+	}
+	u.Out().Printf("deleted\ttrue")
+	u.Out().Printf("calendarId\t%s", calendarID)
+	u.Out().Printf("eventId\t%s", eventID)
+	return nil
+}
+
+type CalendarFreeBusyCmd struct {
+	CalendarIDs string `arg:"" name:"calendarIds" help:"Comma-separated calendar IDs"`
+	From        string `name:"from" help:"Start time (RFC3339, required)"`
+	To          string `name:"to" help:"End time (RFC3339, required)"`
+}
+
+func (c *CalendarFreeBusyCmd) Run(ctx context.Context, flags *RootFlags) error {
+	u := ui.FromContext(ctx)
+	account, err := requireAccount(flags)
+	if err != nil {
+		return err
+	}
+
+	calendarIDs := splitCSV(c.CalendarIDs)
+	if len(calendarIDs) == 0 {
+		return usage("no calendar IDs provided")
+	}
+	if strings.TrimSpace(c.From) == "" || strings.TrimSpace(c.To) == "" {
+		return usage("required: --from and --to")
+	}
+
+	svc, err := newCalendarService(ctx, account)
+	if err != nil {
+		return err
+	}
+
+	req := &calendar.FreeBusyRequest{
+		TimeMin: c.From,
+		TimeMax: c.To,
+		Items:   make([]*calendar.FreeBusyRequestItem, 0, len(calendarIDs)),
+	}
+	for _, id := range calendarIDs {
+		req.Items = append(req.Items, &calendar.FreeBusyRequestItem{Id: id})
+	}
+
+	resp, err := svc.Freebusy.Query(req).Do()
+	if err != nil {
+		return err
+	}
+
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{"calendars": resp.Calendars})
+	}
+
+	if len(resp.Calendars) == 0 {
+		u.Err().Println("No free/busy data")
+		return nil
+	}
+
+	w, flush := tableWriter(ctx)
+	defer flush()
+	fmt.Fprintln(w, "CALENDAR\tSTART\tEND")
+	for id, data := range resp.Calendars {
+		for _, b := range data.Busy {
+			fmt.Fprintf(w, "%s\t%s\t%s\n", id, b.Start, b.End)
+		}
+	}
+	return nil
+}
+
+func listCalendarEvents(ctx context.Context, svc *calendar.Service, calendarID, from, to string, max int64, page, query string) error {
+	u := ui.FromContext(ctx)
 
 	call := svc.Events.List(calendarID).
 		TimeMin(from).
@@ -215,11 +458,11 @@ func listCalendarEvents(cmd *cobra.Command, svc *calendar.Service, calendarID, f
 	if strings.TrimSpace(query) != "" {
 		call = call.Q(query)
 	}
-	resp, err := call.Context(cmd.Context()).Do()
+	resp, err := call.Context(ctx).Do()
 	if err != nil {
 		return err
 	}
-	if outfmt.IsJSON(cmd.Context()) {
+	if outfmt.IsJSON(ctx) {
 		return outfmt.WriteJSON(os.Stdout, map[string]any{
 			"events":        resp.Items,
 			"nextPageToken": resp.NextPageToken,
@@ -231,7 +474,7 @@ func listCalendarEvents(cmd *cobra.Command, svc *calendar.Service, calendarID, f
 		return nil
 	}
 
-	w, flush := tableWriter(cmd.Context())
+	w, flush := tableWriter(ctx)
 	defer flush()
 
 	fmt.Fprintln(w, "ID\tSTART\tEND\tSUMMARY")
@@ -247,11 +490,10 @@ type eventWithCalendar struct {
 	CalendarID string
 }
 
-func listAllCalendarsEvents(cmd *cobra.Command, svc *calendar.Service, from, to string, max int64, page, query string) error {
-	u := ui.FromContext(cmd.Context())
+func listAllCalendarsEvents(ctx context.Context, svc *calendar.Service, from, to string, max int64, page, query string) error {
+	u := ui.FromContext(ctx)
 
-	// Get all calendars
-	calResp, err := svc.CalendarList.List().Context(cmd.Context()).Do()
+	calResp, err := svc.CalendarList.List().Context(ctx).Do()
 	if err != nil {
 		return err
 	}
@@ -261,415 +503,72 @@ func listAllCalendarsEvents(cmd *cobra.Command, svc *calendar.Service, from, to 
 		return nil
 	}
 
-	// Collect events from all calendars
-	var allEvents []*eventWithCalendar
-	for _, cal := range calResp.Items {
-		call := svc.Events.List(cal.Id).
+	all := []*eventWithCalendar{}
+	for _, c := range calResp.Items {
+		events, err := svc.Events.List(c.Id).
 			TimeMin(from).
 			TimeMax(to).
 			MaxResults(max).
 			PageToken(page).
 			SingleEvents(true).
-			OrderBy("startTime")
-		if strings.TrimSpace(query) != "" {
-			call = call.Q(query)
-		}
-		resp, err := call.Context(cmd.Context()).Do()
+			OrderBy("startTime").
+			Q(query).
+			Context(ctx).
+			Do()
 		if err != nil {
-			// Skip calendars that fail (e.g., due to permissions)
+			u.Err().Printf("calendar %s: %v", c.Id, err)
 			continue
 		}
-		for _, e := range resp.Items {
-			allEvents = append(allEvents, &eventWithCalendar{
-				Event:      e,
-				CalendarID: cal.Id,
-			})
+		for _, e := range events.Items {
+			all = append(all, &eventWithCalendar{Event: e, CalendarID: c.Id})
 		}
 	}
 
-	if len(allEvents) == 0 {
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(os.Stdout, map[string]any{"events": all})
+	}
+	if len(all) == 0 {
 		u.Err().Println("No events")
 		return nil
 	}
 
-	// Sort events by start time
-	sortEventsByStartTime(allEvents)
-
-	if outfmt.IsJSON(cmd.Context()) {
-		events := make([]map[string]any, 0, len(allEvents))
-		for _, e := range allEvents {
-			eventMap := map[string]any{
-				"id":         e.Id,
-				"calendarId": e.CalendarID,
-				"summary":    e.Summary,
-				"start":      e.Start,
-				"end":        e.End,
-				"status":     e.Status,
-			}
-			if e.Description != "" {
-				eventMap["description"] = e.Description
-			}
-			if e.Location != "" {
-				eventMap["location"] = e.Location
-			}
-			if len(e.Attendees) > 0 {
-				eventMap["attendees"] = e.Attendees
-			}
-			events = append(events, eventMap)
-		}
-		return outfmt.WriteJSON(os.Stdout, map[string]any{"events": events})
-	}
-
-	w, flush := tableWriter(cmd.Context())
+	w, flush := tableWriter(ctx)
 	defer flush()
-
 	fmt.Fprintln(w, "CALENDAR\tID\tSTART\tEND\tSUMMARY")
-	for _, e := range allEvents {
+	for _, e := range all {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", e.CalendarID, e.Id, eventStart(e.Event), eventEnd(e.Event), e.Summary)
 	}
 	return nil
 }
 
-func sortEventsByStartTime(events []*eventWithCalendar) {
-	// Simple insertion sort since we expect relatively small lists
-	for i := 1; i < len(events); i++ {
-		key := events[i]
-		keyStart := eventStart(key.Event)
-		j := i - 1
-		for j >= 0 && eventStart(events[j].Event) > keyStart {
-			events[j+1] = events[j]
-			j--
+func printCalendarEvent(u *ui.UI, event *calendar.Event) {
+	if u == nil || event == nil {
+		return
+	}
+	u.Out().Printf("id\t%s", event.Id)
+	u.Out().Printf("summary\t%s", orEmpty(event.Summary, "(no title)"))
+	u.Out().Printf("start\t%s", eventStart(event))
+	u.Out().Printf("end\t%s", eventEnd(event))
+	if event.Description != "" {
+		u.Out().Printf("description\t%s", event.Description)
+	}
+	if event.Location != "" {
+		u.Out().Printf("location\t%s", event.Location)
+	}
+	if len(event.Attendees) > 0 {
+		emails := []string{}
+		for _, a := range event.Attendees {
+			if a != nil && strings.TrimSpace(a.Email) != "" {
+				emails = append(emails, strings.TrimSpace(a.Email))
+			}
 		}
-		events[j+1] = key
+		if len(emails) > 0 {
+			u.Out().Printf("attendees\t%s", strings.Join(emails, ", "))
+		}
 	}
-}
-
-func newCalendarEventCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "event <calendarId> <eventId>",
-		Short: "Get event details",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			calendarID := args[0]
-			eventID := args[1]
-
-			svc, err := newCalendarService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			e, err := svc.Events.Get(calendarID, eventID).Do()
-			if err != nil {
-				return err
-			}
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{"event": e})
-			}
-
-			u.Out().Printf("id\t%s", e.Id)
-			u.Out().Printf("summary\t%s", orEmpty(e.Summary, "(no title)"))
-			u.Out().Printf("start\t%s", eventStart(e))
-			u.Out().Printf("end\t%s", eventEnd(e))
-			if e.Location != "" {
-				u.Out().Printf("location\t%s", e.Location)
-			}
-			if e.Description != "" {
-				u.Out().Printf("description\t%s", e.Description)
-			}
-			if len(e.Attendees) > 0 {
-				addrs := make([]string, 0, len(e.Attendees))
-				for _, a := range e.Attendees {
-					if a != nil && a.Email != "" {
-						addrs = append(addrs, a.Email)
-					}
-				}
-				if len(addrs) > 0 {
-					u.Out().Printf("attendees\t%s", strings.Join(addrs, ", "))
-				}
-			}
-			if e.Status != "" {
-				u.Out().Printf("status\t%s", e.Status)
-			}
-			if e.HtmlLink != "" {
-				u.Out().Printf("link\t%s", e.HtmlLink)
-			}
-			return nil
-		},
+	if event.HtmlLink != "" {
+		u.Out().Printf("link\t%s", event.HtmlLink)
 	}
-}
-
-func newCalendarCreateCmd(flags *rootFlags) *cobra.Command {
-	var summary string
-	var from string
-	var to string
-	var description string
-	var location string
-	var attendees string
-	var allDay bool
-
-	cmd := &cobra.Command{
-		Use:   "create <calendarId>",
-		Short: "Create a new event",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			calendarID := args[0]
-
-			if strings.TrimSpace(summary) == "" || strings.TrimSpace(from) == "" || strings.TrimSpace(to) == "" {
-				return usage("required: --summary, --from, --to")
-			}
-
-			svc, err := newCalendarService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			event := &calendar.Event{
-				Summary:     summary,
-				Description: description,
-				Location:    location,
-				Start:       buildEventDateTime(from, allDay),
-				End:         buildEventDateTime(to, allDay),
-				Attendees:   buildAttendees(attendees),
-			}
-
-			created, err := svc.Events.Insert(calendarID, event).Do()
-			if err != nil {
-				return err
-			}
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{"event": created})
-			}
-			u.Out().Printf("id\t%s", created.Id)
-			if created.HtmlLink != "" {
-				u.Out().Printf("link\t%s", created.HtmlLink)
-			}
-			return nil
-		},
-	}
-
-	cmd.Flags().StringVar(&summary, "summary", "", "Event title (required)")
-	cmd.Flags().StringVar(&from, "from", "", "Start time/date (required)")
-	cmd.Flags().StringVar(&to, "to", "", "End time/date (required)")
-	cmd.Flags().StringVar(&description, "description", "", "Event description")
-	cmd.Flags().StringVar(&location, "location", "", "Event location")
-	cmd.Flags().StringVar(&attendees, "attendees", "", "Attendees (comma-separated)")
-	cmd.Flags().BoolVar(&allDay, "all-day", false, "Create all-day event (use YYYY-MM-DD for from/to)")
-	return cmd
-}
-
-func newCalendarUpdateCmd(flags *rootFlags) *cobra.Command {
-	var summary string
-	var from string
-	var to string
-	var description string
-	var location string
-	var attendees string
-	var allDay bool
-
-	cmd := &cobra.Command{
-		Use:   "update <calendarId> <eventId>",
-		Short: "Update an existing event",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			calendarID := args[0]
-			eventID := args[1]
-
-			svc, err := newCalendarService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			existing, err := svc.Events.Get(calendarID, eventID).Do()
-			if err != nil {
-				return err
-			}
-
-			targetAllDay := isAllDayEvent(existing)
-			if cmd.Flags().Changed("all-day") {
-				targetAllDay = allDay
-				// Converting between all-day and timed needs explicit start/end.
-				if !cmd.Flags().Changed("from") || !cmd.Flags().Changed("to") {
-					return usage("when changing --all-day, also provide --from and --to")
-				}
-			}
-
-			changed := false
-
-			if cmd.Flags().Changed("summary") {
-				existing.Summary = summary
-				changed = true
-			}
-			if cmd.Flags().Changed("description") {
-				existing.Description = description
-				changed = true
-			}
-			if cmd.Flags().Changed("location") {
-				existing.Location = location
-				changed = true
-			}
-
-			if cmd.Flags().Changed("from") {
-				existing.Start = buildEventDateTime(from, targetAllDay)
-				changed = true
-			}
-			if cmd.Flags().Changed("to") {
-				existing.End = buildEventDateTime(to, targetAllDay)
-				changed = true
-			}
-
-			if cmd.Flags().Changed("attendees") {
-				existing.Attendees = buildAttendees(attendees)
-				changed = true
-			}
-
-			if !changed {
-				return usage("no updates provided")
-			}
-
-			updated, err := svc.Events.Update(calendarID, eventID, existing).Do()
-			if err != nil {
-				return err
-			}
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{"event": updated})
-			}
-			u.Out().Printf("id\t%s", updated.Id)
-			if updated.HtmlLink != "" {
-				u.Out().Printf("link\t%s", updated.HtmlLink)
-			}
-			return nil
-		},
-	}
-
-	cmd.Flags().StringVar(&summary, "summary", "", "Event title")
-	cmd.Flags().StringVar(&from, "from", "", "Start time/date (RFC3339 or YYYY-MM-DD)")
-	cmd.Flags().StringVar(&to, "to", "", "End time/date (RFC3339 or YYYY-MM-DD)")
-	cmd.Flags().StringVar(&description, "description", "", "Event description")
-	cmd.Flags().StringVar(&location, "location", "", "Event location")
-	cmd.Flags().StringVar(&attendees, "attendees", "", "Attendees (comma-separated)")
-	cmd.Flags().BoolVar(&allDay, "all-day", false, "Treat from/to as all-day (YYYY-MM-DD)")
-	return cmd
-}
-
-func newCalendarDeleteCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "delete <calendarId> <eventId>",
-		Short: "Delete an event",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			calendarID := args[0]
-			eventID := args[1]
-
-			if confirmErr := confirmDestructive(cmd, flags, fmt.Sprintf("delete calendar event %s/%s", calendarID, eventID)); confirmErr != nil {
-				return confirmErr
-			}
-
-			svc, err := newCalendarService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			if err := svc.Events.Delete(calendarID, eventID).Do(); err != nil {
-				return err
-			}
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{
-					"deleted":    true,
-					"calendarId": calendarID,
-					"eventId":    eventID,
-				})
-			}
-			u.Out().Printf("deleted\ttrue")
-			u.Out().Printf("calendar_id\t%s", calendarID)
-			u.Out().Printf("event_id\t%s", eventID)
-			return nil
-		},
-	}
-}
-
-func newCalendarFreeBusyCmd(flags *rootFlags) *cobra.Command {
-	var from string
-	var to string
-
-	cmd := &cobra.Command{
-		Use:   "freebusy <calendarIds>",
-		Short: "Check free/busy status for calendars (comma-separated IDs)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := ui.FromContext(cmd.Context())
-			account, err := requireAccount(flags)
-			if err != nil {
-				return err
-			}
-			calendarIDs := splitCSV(args[0])
-			if len(calendarIDs) == 0 {
-				return usage("no calendar IDs provided")
-			}
-			if strings.TrimSpace(from) == "" || strings.TrimSpace(to) == "" {
-				return usage("required: --from and --to")
-			}
-
-			svc, err := newCalendarService(cmd.Context(), account)
-			if err != nil {
-				return err
-			}
-
-			items := make([]*calendar.FreeBusyRequestItem, 0, len(calendarIDs))
-			for _, id := range calendarIDs {
-				items = append(items, &calendar.FreeBusyRequestItem{Id: id})
-			}
-
-			resp, err := svc.Freebusy.Query(&calendar.FreeBusyRequest{
-				TimeMin: from,
-				TimeMax: to,
-				Items:   items,
-			}).Do()
-			if err != nil {
-				return err
-			}
-			if outfmt.IsJSON(cmd.Context()) {
-				return outfmt.WriteJSON(os.Stdout, map[string]any{"calendars": resp.Calendars})
-			}
-			if len(resp.Calendars) == 0 {
-				u.Err().Println("No data")
-				return nil
-			}
-
-			w, flush := tableWriter(cmd.Context())
-			defer flush()
-			fmt.Fprintln(w, "CALENDAR\tSTART\tEND")
-			for id, data := range resp.Calendars {
-				for _, b := range data.Busy {
-					fmt.Fprintf(w, "%s\t%s\t%s\n", id, b.Start, b.End)
-				}
-			}
-			return nil
-		},
-	}
-
-	cmd.Flags().StringVar(&from, "from", "", "Start time (RFC3339, required)")
-	cmd.Flags().StringVar(&to, "to", "", "End time (RFC3339, required)")
-	return cmd
 }
 
 func buildEventDateTime(value string, allDay bool) *calendar.EventDateTime {

@@ -20,10 +20,7 @@ func TestCalendarRespondCmd_Text(t *testing.T) {
 	t.Cleanup(func() { newCalendarService = origNew })
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasPrefix(path, "/calendar/v3") {
-			path = strings.TrimPrefix(path, "/calendar/v3")
-		}
+		path := strings.TrimPrefix(r.URL.Path, "/calendar/v3")
 		switch {
 		case strings.Contains(path, "/calendars/cal1/events/evt1") && r.Method == http.MethodGet:
 			w.Header().Set("Content-Type", "application/json")
@@ -60,7 +57,7 @@ func TestCalendarRespondCmd_Text(t *testing.T) {
 	}
 	newCalendarService = func(context.Context, string) (*calendar.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 	out := captureStdout(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: os.Stdout, Stderr: io.Discard, Color: "never"})
 		if uiErr != nil {
@@ -68,12 +65,8 @@ func TestCalendarRespondCmd_Text(t *testing.T) {
 		}
 		ctx := ui.WithUI(context.Background(), u)
 
-		cmd := newCalendarRespondCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"cal1", "evt1"})
-		_ = cmd.Flags().Set("status", "accepted")
-		_ = cmd.Flags().Set("comment", "ok")
-		if err := cmd.Execute(); err != nil {
+		cmd := &CalendarRespondCmd{}
+		if err := runKong(t, cmd, []string{"cal1", "evt1", "--status", "accepted", "--comment", "ok"}, ctx, flags); err != nil {
 			t.Fatalf("respond: %v", err)
 		}
 	})

@@ -39,7 +39,7 @@ func TestExecute_CalendarMoreCommands_JSON(t *testing.T) {
 				"end":     map[string]any{"dateTime": "2025-12-17T11:00:00Z"},
 			})
 			return
-		case strings.Contains(path, "/calendars/"+calendarID+"/events/"+eventID) && r.Method == http.MethodPut:
+		case strings.Contains(path, "/calendars/"+calendarID+"/events/"+eventID) && (r.Method == http.MethodPatch || r.Method == http.MethodPut):
 			var payload map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&payload)
 			payload["id"] = eventID

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
 )
@@ -67,10 +66,9 @@ func TestReplyHeaders(t *testing.T) {
 		t.Fatalf("NewService: %v", err)
 	}
 
-	cmd := &cobra.Command{}
-	cmd.SetContext(context.Background())
+	ctx := context.Background()
 
-	inReplyTo, refs, threadID, err := replyHeaders(cmd, svc, "m1")
+	inReplyTo, refs, threadID, err := replyHeaders(ctx, svc, "m1")
 	if err != nil {
 		t.Fatalf("replyHeaders: %v", err)
 	}
@@ -78,7 +76,7 @@ func TestReplyHeaders(t *testing.T) {
 		t.Fatalf("unexpected: inReplyTo=%q refs=%q thread=%q", inReplyTo, refs, threadID)
 	}
 
-	inReplyTo, refs, threadID, err = replyHeaders(cmd, svc, "m2")
+	inReplyTo, refs, threadID, err = replyHeaders(ctx, svc, "m2")
 	if err != nil {
 		t.Fatalf("replyHeaders: %v", err)
 	}

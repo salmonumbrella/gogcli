@@ -45,10 +45,7 @@ func TestVersionCmd_JSON(t *testing.T) {
 	ctx = outfmt.WithMode(ctx, outfmt.Mode{JSON: true})
 
 	jsonOut := captureStdout(t, func() {
-		cmd := newVersionCmd()
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{})
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &VersionCmd{}, []string{}, ctx, nil); err != nil {
 			t.Fatalf("execute: %v", err)
 		}
 	})

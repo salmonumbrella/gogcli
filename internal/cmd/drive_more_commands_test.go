@@ -33,10 +33,7 @@ func TestDriveGetDownloadUploadURL_JSON(t *testing.T) {
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasPrefix(path, "/drive/v3") {
-			path = strings.TrimPrefix(path, "/drive/v3")
-		}
+		path := strings.TrimPrefix(r.URL.Path, "/drive/v3")
 		switch {
 		case strings.HasPrefix(path, "/files/") && r.Method == http.MethodGet:
 			id := strings.TrimPrefix(path, "/files/")
@@ -82,7 +79,7 @@ func TestDriveGetDownloadUploadURL_JSON(t *testing.T) {
 	}
 	newDriveService = func(context.Context, string) (*drive.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com", Force: true}
+	flags := &RootFlags{Account: "a@b.com", Force: true}
 	u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
 	if uiErr != nil {
 		t.Fatalf("ui.New: %v", uiErr)
@@ -91,21 +88,16 @@ func TestDriveGetDownloadUploadURL_JSON(t *testing.T) {
 	ctx = outfmt.WithMode(ctx, outfmt.Mode{JSON: true})
 
 	_ = captureStdout(t, func() {
-		cmd := newDriveGetCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"file1"})
-		if err := cmd.Execute(); err != nil {
+		cmd := &DriveGetCmd{}
+		if err := runKong(t, cmd, []string{"file1"}, ctx, flags); err != nil {
 			t.Fatalf("get: %v", err)
 		}
 	})
 
 	outPath := filepath.Join(t.TempDir(), "download.bin")
 	_ = captureStdout(t, func() {
-		cmd := newDriveDownloadCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"file1"})
-		_ = cmd.Flags().Set("out", outPath)
-		if err := cmd.Execute(); err != nil {
+		cmd := &DriveDownloadCmd{}
+		if err := runKong(t, cmd, []string{"file1", "--out", outPath}, ctx, flags); err != nil {
 			t.Fatalf("download: %v", err)
 		}
 	})
@@ -118,20 +110,15 @@ func TestDriveGetDownloadUploadURL_JSON(t *testing.T) {
 		t.Fatalf("write: %v", writeErr)
 	}
 	_ = captureStdout(t, func() {
-		cmd := newDriveUploadCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{local})
-		_ = cmd.Flags().Set("name", "Upload.txt")
-		if err := cmd.Execute(); err != nil {
+		cmd := &DriveUploadCmd{}
+		if err := runKong(t, cmd, []string{local, "--name", "Upload.txt"}, ctx, flags); err != nil {
 			t.Fatalf("upload: %v", err)
 		}
 	})
 
 	urlOut := captureStdout(t, func() {
-		cmd := newDriveURLCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"file1", "file2"})
-		if err := cmd.Execute(); err != nil {
+		cmd := &DriveURLCmd{}
+		if err := runKong(t, cmd, []string{"file1", "file2"}, ctx, flags); err != nil {
 			t.Fatalf("url: %v", err)
 		}
 	})

@@ -64,7 +64,7 @@ func TestGmailThreadModifyCmd_JSON(t *testing.T) {
 	}
 	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
 
-	flags := &rootFlags{Account: "a@b.com"}
+	flags := &RootFlags{Account: "a@b.com"}
 
 	out := captureStdout(t, func() {
 		u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
@@ -74,12 +74,11 @@ func TestGmailThreadModifyCmd_JSON(t *testing.T) {
 		ctx := ui.WithUI(context.Background(), u)
 		ctx = outfmt.WithMode(ctx, outfmt.Mode{JSON: true})
 
-		cmd := newGmailThreadModifyCmd(flags)
-		cmd.SetContext(ctx)
-		cmd.SetArgs([]string{"t1"})
-		cmd.Flags().Set("add", "INBOX")
-		cmd.Flags().Set("remove", "Custom")
-		if err := cmd.Execute(); err != nil {
+		if err := runKong(t, &GmailThreadModifyCmd{}, []string{
+			"t1",
+			"--add", "INBOX",
+			"--remove", "Custom",
+		}, ctx, flags); err != nil {
 			t.Fatalf("execute: %v", err)
 		}
 	})
