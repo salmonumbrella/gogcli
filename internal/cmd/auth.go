@@ -19,10 +19,10 @@ import (
 )
 
 var (
-	openSecretsStore    = secrets.OpenDefault
-	authorizeGoogle     = googleauth.Authorize
-	startManageServer   = googleauth.StartManageServer
-	checkRefreshToken   = googleauth.CheckRefreshToken
+	openSecretsStore     = secrets.OpenDefault
+	authorizeGoogle      = googleauth.Authorize
+	startManageServer    = googleauth.StartManageServer
+	checkRefreshToken    = googleauth.CheckRefreshToken
 	ensureKeychainAccess = defaultEnsureKeychainAccess
 )
 
