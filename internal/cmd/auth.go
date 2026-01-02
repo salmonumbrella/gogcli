@@ -265,6 +265,11 @@ func (c *AuthTokensImportCmd) Run(ctx context.Context) error {
 		createdAt = parsed
 	}
 
+	// Pre-flight: ensure keychain is accessible before storing token
+	if err := ensureKeychainAccess(); err != nil {
+		return fmt.Errorf("keychain access: %w", err)
+	}
+
 	store, err := openSecretsStore()
 	if err != nil {
 		return err
