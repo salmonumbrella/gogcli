@@ -675,6 +675,7 @@ CI runs format checks, tests, and lint on push/PR.
 Opt-in tests that hit real Google APIs using your stored `gog` credentials/tokens.
 
 ```bash
+# Optional: override which account to use
 export GOG_IT_ACCOUNT=you@gmail.com
 go test -tags=integration ./...
 ```

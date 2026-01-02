@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,11 +14,36 @@ import (
 	"github.com/steipete/gogcli/internal/secrets"
 )
 
-func TestDriveSmoke(t *testing.T) {
-	account := os.Getenv("GOG_IT_ACCOUNT")
-	if account == "" {
-		t.Skip("set GOG_IT_ACCOUNT")
+func integrationAccount(t *testing.T) string {
+	t.Helper()
+
+	if v := strings.TrimSpace(os.Getenv("GOG_IT_ACCOUNT")); v != "" {
+		return v
 	}
+
+	store, err := secrets.OpenDefault()
+	if err != nil {
+		t.Skipf("open secrets store (set GOG_IT_ACCOUNT to avoid keyring prompts): %v", err)
+	}
+
+	if v, err := store.GetDefaultAccount(); err == nil && strings.TrimSpace(v) != "" {
+		return v
+	}
+
+	tokens, err := store.ListTokens()
+	if err != nil {
+		t.Skipf("list tokens: %v", err)
+	}
+	if len(tokens) == 1 && strings.TrimSpace(tokens[0].Email) != "" {
+		return tokens[0].Email
+	}
+
+	t.Skip("set GOG_IT_ACCOUNT (or set a default account via `gog auth manage`, or store exactly one token)")
+	return ""
+}
+
+func TestDriveSmoke(t *testing.T) {
+	account := integrationAccount(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -39,10 +65,7 @@ func TestDriveSmoke(t *testing.T) {
 }
 
 func TestCalendarSmoke(t *testing.T) {
-	account := os.Getenv("GOG_IT_ACCOUNT")
-	if account == "" {
-		t.Skip("set GOG_IT_ACCOUNT")
-	}
+	account := integrationAccount(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -58,10 +81,7 @@ func TestCalendarSmoke(t *testing.T) {
 }
 
 func TestGmailSmoke(t *testing.T) {
-	account := os.Getenv("GOG_IT_ACCOUNT")
-	if account == "" {
-		t.Skip("set GOG_IT_ACCOUNT")
-	}
+	account := integrationAccount(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -77,10 +97,7 @@ func TestGmailSmoke(t *testing.T) {
 }
 
 func TestAuthRefreshTokenSmoke(t *testing.T) {
-	account := os.Getenv("GOG_IT_ACCOUNT")
-	if account == "" {
-		t.Skip("set GOG_IT_ACCOUNT")
-	}
+	account := integrationAccount(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -94,16 +111,17 @@ func TestAuthRefreshTokenSmoke(t *testing.T) {
 		t.Fatalf("GetToken: %v", err)
 	}
 
-	if err := googleauth.CheckRefreshToken(ctx, tok.RefreshToken, tok.Scopes, 15*time.Second); err != nil {
+	scopes := tok.Scopes
+	if len(scopes) == 0 {
+		scopes = nil
+	}
+	if err := googleauth.CheckRefreshToken(ctx, tok.RefreshToken, scopes, 15*time.Second); err != nil {
 		t.Fatalf("CheckRefreshToken: %v", err)
 	}
 }
 
 func TestContactsSmoke(t *testing.T) {
-	account := os.Getenv("GOG_IT_ACCOUNT")
-	if account == "" {
-		t.Skip("set GOG_IT_ACCOUNT")
-	}
+	account := integrationAccount(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
