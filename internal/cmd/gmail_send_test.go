@@ -323,6 +323,42 @@ func TestBuildReplyAllRecipients(t *testing.T) {
 			expectTo:  []string{},
 			expectCc:  []string{},
 		},
+		{
+			name: "Reply-To header takes precedence over From (RFC 5322)",
+			info: &replyInfo{
+				FromAddr:    "original-sender@example.com",
+				ReplyToAddr: "reply-here@example.com",
+				ToAddrs:     []string{"me@example.com", "alice@example.com"},
+				CcAddrs:     nil,
+			},
+			selfEmail: "me@example.com",
+			expectTo:  []string{"reply-here@example.com", "alice@example.com"},
+			expectCc:  []string{},
+		},
+		{
+			name: "Reply-To with display name",
+			info: &replyInfo{
+				FromAddr:    "sender@example.com",
+				ReplyToAddr: "Mailing List <list@example.com>",
+				ToAddrs:     []string{"alice@example.com"},
+				CcAddrs:     nil,
+			},
+			selfEmail: "me@example.com",
+			expectTo:  []string{"list@example.com", "alice@example.com"},
+			expectCc:  []string{},
+		},
+		{
+			name: "Empty Reply-To falls back to From",
+			info: &replyInfo{
+				FromAddr:    "sender@example.com",
+				ReplyToAddr: "",
+				ToAddrs:     []string{"alice@example.com"},
+				CcAddrs:     nil,
+			},
+			selfEmail: "me@example.com",
+			expectTo:  []string{"sender@example.com", "alice@example.com"},
+			expectCc:  []string{},
+		},
 	}
 
 	for _, tc := range tests {
@@ -370,6 +406,15 @@ func TestFetchReplyInfo(t *testing.T) {
 			Headers: []hdr{
 				{Name: "Message-ID", Value: "<id2@example.com>"},
 				{Name: "From", Value: `"Sender Name" <sender@example.com>`},
+				{Name: "To", Value: "recipient@example.com"},
+			},
+		},
+		"m3": {
+			ThreadID: "t3",
+			Headers: []hdr{
+				{Name: "Message-ID", Value: "<id3@example.com>"},
+				{Name: "From", Value: "original-sender@example.com"},
+				{Name: "Reply-To", Value: "Mailing List <list@example.com>"},
 				{Name: "To", Value: "recipient@example.com"},
 			},
 		},
@@ -449,6 +494,18 @@ func TestFetchReplyInfo(t *testing.T) {
 	}
 	if info.ThreadID != "" || info.FromAddr != "" {
 		t.Errorf("Expected empty replyInfo for empty message ID")
+	}
+
+	// Test m3: message with Reply-To header
+	info, err = fetchReplyInfo(ctx, svc, "m3")
+	if err != nil {
+		t.Fatalf("fetchReplyInfo(m3): %v", err)
+	}
+	if info.FromAddr != "original-sender@example.com" {
+		t.Errorf("FromAddr = %q, want %q", info.FromAddr, "original-sender@example.com")
+	}
+	if info.ReplyToAddr != "Mailing List <list@example.com>" {
+		t.Errorf("ReplyToAddr = %q, want %q", info.ReplyToAddr, "Mailing List <list@example.com>")
 	}
 }
 

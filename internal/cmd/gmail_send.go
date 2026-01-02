@@ -151,15 +151,22 @@ func (c *GmailSendCmd) Run(ctx context.Context, flags *RootFlags) error {
 }
 
 // buildReplyAllRecipients constructs To and Cc lists for a reply-all.
-// Original sender (From) -> To
+// Per RFC 5322: if Reply-To header is present, use it instead of From.
+// Reply-To (or From if no Reply-To) -> To
 // Original To recipients -> To
 // Original Cc recipients -> Cc
 // Filters out self and deduplicates.
 func buildReplyAllRecipients(info *replyInfo, selfEmail string) (to, cc []string) {
-	// Collect To recipients: original sender + original To recipients
+	// Collect To recipients: reply address (Reply-To if present, else From) + original To recipients
 	toAddrs := make([]string, 0, 1+len(info.ToAddrs))
-	if fromAddrs := parseEmailAddresses(info.FromAddr); len(fromAddrs) > 0 {
-		toAddrs = append(toAddrs, fromAddrs...)
+
+	// Per RFC 5322, Reply-To takes precedence over From for replies
+	replyAddress := info.ReplyToAddr
+	if replyAddress == "" {
+		replyAddress = info.FromAddr
+	}
+	if replyAddrs := parseEmailAddresses(replyAddress); len(replyAddrs) > 0 {
+		toAddrs = append(toAddrs, replyAddrs...)
 	}
 	toAddrs = append(toAddrs, info.ToAddrs...)
 
@@ -188,12 +195,13 @@ func buildReplyAllRecipients(info *replyInfo, selfEmail string) (to, cc []string
 
 // replyInfo contains all information extracted from the original message for replying
 type replyInfo struct {
-	InReplyTo  string
-	References string
-	ThreadID   string
-	FromAddr   string   // Original sender
-	ToAddrs    []string // Original To recipients
-	CcAddrs    []string // Original Cc recipients
+	InReplyTo   string
+	References  string
+	ThreadID    string
+	FromAddr    string   // Original sender
+	ReplyToAddr string   // Original Reply-To header (per RFC 5322, use this instead of From if present)
+	ToAddrs     []string // Original To recipients
+	CcAddrs     []string // Original Cc recipients
 }
 
 func replyHeaders(ctx context.Context, svc *gmail.Service, replyToMessageID string) (inReplyTo string, references string, threadID string, err error) {
@@ -211,7 +219,7 @@ func fetchReplyInfo(ctx context.Context, svc *gmail.Service, replyToMessageID st
 	}
 	msg, err := svc.Users.Messages.Get("me", replyToMessageID).
 		Format("metadata").
-		MetadataHeaders("Message-ID", "Message-Id", "References", "In-Reply-To", "From", "To", "Cc").
+		MetadataHeaders("Message-ID", "Message-Id", "References", "In-Reply-To", "From", "Reply-To", "To", "Cc").
 		Context(ctx).
 		Do()
 	if err != nil {
@@ -219,10 +227,11 @@ func fetchReplyInfo(ctx context.Context, svc *gmail.Service, replyToMessageID st
 	}
 
 	info := &replyInfo{
-		ThreadID: msg.ThreadId,
-		FromAddr: headerValue(msg.Payload, "From"),
-		ToAddrs:  parseEmailAddresses(headerValue(msg.Payload, "To")),
-		CcAddrs:  parseEmailAddresses(headerValue(msg.Payload, "Cc")),
+		ThreadID:    msg.ThreadId,
+		FromAddr:    headerValue(msg.Payload, "From"),
+		ReplyToAddr: headerValue(msg.Payload, "Reply-To"),
+		ToAddrs:     parseEmailAddresses(headerValue(msg.Payload, "To")),
+		CcAddrs:     parseEmailAddresses(headerValue(msg.Payload, "Cc")),
 	}
 
 	// Prefer Message-ID and References from the original message.
