@@ -113,15 +113,18 @@ func TestAllowedBackendsFromEnv(t *testing.T) {
 				if err == nil {
 					t.Fatal("expected error")
 				}
+
 				if !errors.Is(err, errInvalidKeyringBackend) {
 					t.Errorf("expected errInvalidKeyringBackend, got %v", err)
 				}
+
 				return
 			}
 
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+
 			if len(backends) != tt.wantLen {
 				t.Errorf("expected %d backends, got %d", tt.wantLen, len(backends))
 			}
