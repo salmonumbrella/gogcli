@@ -335,7 +335,8 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *
 
 	// For --add-attendee, fetch current event to preserve existing attendees with metadata.
 	if flagProvided(kctx, "add-attendee") {
-		existing, err := svc.Events.Get(calendarID, eventID).Do()
+		var existing *calendar.Event
+		existing, err = svc.Events.Get(calendarID, eventID).Do()
 		if err != nil {
 			return fmt.Errorf("failed to fetch current event: %w", err)
 		}
