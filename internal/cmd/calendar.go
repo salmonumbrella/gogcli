@@ -19,6 +19,12 @@ import (
 
 var newCalendarService = googleapi.NewCalendar
 
+const (
+	scopeAll    = "all"
+	scopeSingle = "single"
+	scopeFuture = "future"
+)
+
 type CalendarCmd struct {
 	Calendars       CalendarCalendarsCmd       `cmd:"" name:"calendars" help:"List calendars"`
 	ACL             CalendarAclCmd             `cmd:"" name:"acl" help:"List calendar ACL"`
@@ -369,16 +375,16 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *
 
 	scope := strings.TrimSpace(strings.ToLower(c.Scope))
 	if scope == "" {
-		scope = "all"
+		scope = scopeAll
 	}
 	switch scope {
-	case "single":
+	case scopeSingle:
 		if strings.TrimSpace(c.OriginalStartTime) == "" {
 			return usage("--original-start required when --scope=single")
 		}
-	case "future":
+	case scopeFuture:
 		return fmt.Errorf("scope=future is not supported yet")
-	case "all":
+	case scopeAll:
 	default:
 		return fmt.Errorf("invalid scope: %q (must be single, future, or all)", scope)
 	}
@@ -475,10 +481,10 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *
 	}
 
 	targetEventID := eventID
-	if scope == "single" {
-		instanceID, err := resolveRecurringInstanceID(ctx, svc, calendarID, eventID, c.OriginalStartTime)
-		if err != nil {
-			return err
+	if scope == scopeSingle {
+		instanceID, resolveErr := resolveRecurringInstanceID(ctx, svc, calendarID, eventID, c.OriginalStartTime)
+		if resolveErr != nil {
+			return resolveErr
 		}
 		targetEventID = instanceID
 	}
@@ -518,22 +524,22 @@ func (c *CalendarDeleteCmd) Run(ctx context.Context, flags *RootFlags) error {
 
 	scope := strings.TrimSpace(strings.ToLower(c.Scope))
 	if scope == "" {
-		scope = "all"
+		scope = scopeAll
 	}
 	switch scope {
-	case "single":
+	case scopeSingle:
 		if strings.TrimSpace(c.OriginalStartTime) == "" {
 			return usage("--original-start required when --scope=single")
 		}
-	case "future":
+	case scopeFuture:
 		return fmt.Errorf("scope=future is not supported yet")
-	case "all":
+	case scopeAll:
 	default:
 		return fmt.Errorf("invalid scope: %q (must be single, future, or all)", scope)
 	}
 
 	confirmMessage := fmt.Sprintf("delete event %s from calendar %s", eventID, calendarID)
-	if scope == "single" {
+	if scope == scopeSingle {
 		confirmMessage = fmt.Sprintf("delete event %s (instance start %s) from calendar %s", eventID, c.OriginalStartTime, calendarID)
 	}
 	if confirmErr := confirmDestructive(ctx, flags, confirmMessage); confirmErr != nil {
@@ -546,10 +552,10 @@ func (c *CalendarDeleteCmd) Run(ctx context.Context, flags *RootFlags) error {
 	}
 
 	targetEventID := eventID
-	if scope == "single" {
-		instanceID, err := resolveRecurringInstanceID(ctx, svc, calendarID, eventID, c.OriginalStartTime)
-		if err != nil {
-			return err
+	if scope == scopeSingle {
+		instanceID, resolveErr := resolveRecurringInstanceID(ctx, svc, calendarID, eventID, c.OriginalStartTime)
+		if resolveErr != nil {
+			return resolveErr
 		}
 		targetEventID = instanceID
 	}
