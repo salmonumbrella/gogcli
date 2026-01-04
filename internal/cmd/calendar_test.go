@@ -118,3 +118,30 @@ func TestValidateTransparency(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateSendUpdates(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{"all", "all", false},
+		{"externalOnly", "externalOnly", false},
+		{"none", "none", false},
+		{"ALL", "all", false},
+		{"", "", false},
+		{"invalid", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := validateSendUpdates(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateSendUpdates(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("validateSendUpdates(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

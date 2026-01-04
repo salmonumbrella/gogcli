@@ -227,6 +227,7 @@ type CalendarCreateCmd struct {
 	ColorId      string `name:"color" help:"Event color ID (1-11). Use 'gog calendar colors' to see available colors."`
 	Visibility   string `name:"visibility" help:"Event visibility: default, public, private, confidential"`
 	Transparency string `name:"transparency" help:"Show as busy (opaque) or free (transparent). Aliases: busy, free"`
+	SendUpdates  string `name:"send-updates" help:"Notification mode: all, externalOnly, none (default: all)"`
 }
 
 func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
@@ -256,6 +257,10 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 	if err != nil {
 		return err
 	}
+	sendUpdates, err := validateSendUpdates(c.SendUpdates)
+	if err != nil {
+		return err
+	}
 
 	svc, err := newCalendarService(ctx, account)
 	if err != nil {
@@ -274,7 +279,11 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 		Transparency: transparency,
 	}
 
-	created, err := svc.Events.Insert(calendarID, event).Do()
+	call := svc.Events.Insert(calendarID, event)
+	if sendUpdates != "" {
+		call = call.SendUpdates(sendUpdates)
+	}
+	created, err := call.Do()
 	if err != nil {
 		return err
 	}
@@ -733,6 +742,23 @@ func validateTransparency(s string) (string, error) {
 		return s, nil
 	default:
 		return "", fmt.Errorf("invalid transparency: %q (must be opaque/busy or transparent/free)", s)
+	}
+}
+
+func validateSendUpdates(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", nil
+	}
+	switch strings.ToLower(s) {
+	case "all":
+		return "all", nil
+	case "externalonly":
+		return "externalOnly", nil
+	case "none":
+		return "none", nil
+	default:
+		return "", fmt.Errorf("invalid send-updates value: %q (must be all, externalOnly, or none)", s)
 	}
 }
 
