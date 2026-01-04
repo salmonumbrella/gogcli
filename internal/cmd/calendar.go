@@ -20,21 +20,22 @@ import (
 var newCalendarService = googleapi.NewCalendar
 
 type CalendarCmd struct {
-	Calendars CalendarCalendarsCmd `cmd:"" name:"calendars" help:"List calendars"`
-	ACL       CalendarAclCmd       `cmd:"" name:"acl" help:"List calendar ACL"`
-	Events    CalendarEventsCmd    `cmd:"" name:"events" help:"List events from a calendar or all calendars"`
-	Event     CalendarEventCmd     `cmd:"" name:"event" help:"Get event"`
-	Create    CalendarCreateCmd    `cmd:"" name:"create" help:"Create an event"`
-	Update    CalendarUpdateCmd    `cmd:"" name:"update" help:"Update an event"`
-	Delete    CalendarDeleteCmd    `cmd:"" name:"delete" help:"Delete an event"`
-	FreeBusy  CalendarFreeBusyCmd  `cmd:"" name:"freebusy" help:"Get free/busy"`
-	Respond   CalendarRespondCmd   `cmd:"" name:"respond" help:"Respond to an event invitation"`
-	Colors    CalendarColorsCmd    `cmd:"" name:"colors" help:"Show calendar colors"`
-	Conflicts CalendarConflictsCmd `cmd:"" name:"conflicts" help:"Find conflicts"`
-	Search    CalendarSearchCmd    `cmd:"" name:"search" help:"Search events"`
-	Time      CalendarTimeCmd      `cmd:"" name:"time" help:"Show server time"`
-	FocusTime CalendarFocusTimeCmd `cmd:"" name:"focus-time" help:"Create a Focus Time block"`
-	OOO       CalendarOOOCmd       `cmd:"" name:"out-of-office" aliases:"ooo" help:"Create an Out of Office event"`
+	Calendars       CalendarCalendarsCmd       `cmd:"" name:"calendars" help:"List calendars"`
+	ACL             CalendarAclCmd             `cmd:"" name:"acl" help:"List calendar ACL"`
+	Events          CalendarEventsCmd          `cmd:"" name:"events" help:"List events from a calendar or all calendars"`
+	Event           CalendarEventCmd           `cmd:"" name:"event" help:"Get event"`
+	Create          CalendarCreateCmd          `cmd:"" name:"create" help:"Create an event"`
+	Update          CalendarUpdateCmd          `cmd:"" name:"update" help:"Update an event"`
+	Delete          CalendarDeleteCmd          `cmd:"" name:"delete" help:"Delete an event"`
+	FreeBusy        CalendarFreeBusyCmd        `cmd:"" name:"freebusy" help:"Get free/busy"`
+	Respond         CalendarRespondCmd         `cmd:"" name:"respond" help:"Respond to an event invitation"`
+	Colors          CalendarColorsCmd          `cmd:"" name:"colors" help:"Show calendar colors"`
+	Conflicts       CalendarConflictsCmd       `cmd:"" name:"conflicts" help:"Find conflicts"`
+	Search          CalendarSearchCmd          `cmd:"" name:"search" help:"Search events"`
+	Time            CalendarTimeCmd            `cmd:"" name:"time" help:"Show server time"`
+	FocusTime       CalendarFocusTimeCmd       `cmd:"" name:"focus-time" help:"Create a Focus Time block"`
+	OOO             CalendarOOOCmd             `cmd:"" name:"out-of-office" aliases:"ooo" help:"Create an Out of Office event"`
+	WorkingLocation CalendarWorkingLocationCmd `cmd:"" name:"working-location" aliases:"wl" help:"Set working location (home/office/custom)"`
 }
 
 type CalendarCalendarsCmd struct {
