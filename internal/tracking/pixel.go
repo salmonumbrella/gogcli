@@ -3,14 +3,17 @@ package tracking
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 )
 
+var errTrackingNotConfigured = errors.New("tracking not configured")
+
 // GeneratePixelURL creates a tracking pixel URL for an email
 func GeneratePixelURL(cfg *Config, recipient, subject string) (string, string, error) {
 	if !cfg.IsConfigured() {
-		return "", "", fmt.Errorf("tracking not configured")
+		return "", "", errTrackingNotConfigured
 	}
 
 	// Hash subject (first 6 chars)
@@ -27,8 +30,7 @@ func GeneratePixelURL(cfg *Config, recipient, subject string) (string, string, e
 		return "", "", fmt.Errorf("encrypt payload: %w", err)
 	}
 
-	pixelURL := fmt.Sprintf("%s/p/%s.gif", cfg.WorkerURL, blob)
-	return pixelURL, blob, nil
+	return fmt.Sprintf("%s/p/%s.gif", cfg.WorkerURL, blob), blob, nil
 }
 
 // GeneratePixelHTML returns HTML img tag for the tracking pixel

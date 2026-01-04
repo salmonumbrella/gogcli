@@ -122,9 +122,9 @@ func (c *GmailSendCmd) Run(ctx context.Context, flags *RootFlags) error {
 	var trackingID string
 	htmlBody := c.BodyHTML
 	if c.Track {
-		trackingCfg, err := tracking.LoadConfig()
-		if err != nil {
-			return fmt.Errorf("load tracking config: %w", err)
+		trackingCfg, loadErr := tracking.LoadConfig()
+		if loadErr != nil {
+			return fmt.Errorf("load tracking config: %w", loadErr)
 		}
 		if !trackingCfg.IsConfigured() {
 			return fmt.Errorf("tracking not configured; run 'gog gmail track setup' first")
@@ -135,15 +135,15 @@ func (c *GmailSendCmd) Run(ctx context.Context, flags *RootFlags) error {
 
 		// Use first resolved recipient for tracking
 		firstRecipient := toRecipients[0]
-		pixelURL, blob, err := tracking.GeneratePixelURL(trackingCfg, strings.TrimSpace(firstRecipient), c.Subject)
-		if err != nil {
-			return fmt.Errorf("generate tracking pixel: %w", err)
+		pixelURL, blob, genErr := tracking.GeneratePixelURL(trackingCfg, strings.TrimSpace(firstRecipient), c.Subject)
+		if genErr != nil {
+			return fmt.Errorf("generate tracking pixel: %w", genErr)
 		}
 		trackingID = blob
 
 		// Inject pixel at end of HTML body
 		pixelHTML := tracking.GeneratePixelHTML(pixelURL)
-		htmlBody = htmlBody + pixelHTML
+		htmlBody += pixelHTML
 	}
 
 	raw, err := buildRFC822(mailOptions{

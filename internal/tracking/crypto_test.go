@@ -27,14 +27,16 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 		t.Fatalf("Decrypt failed: %v", err)
 	}
 
-	if decrypted.Recipient != payload.Recipient {
-		t.Errorf("Recipient mismatch: got %q, want %q", decrypted.Recipient, payload.Recipient)
+	if recipient := decrypted.Recipient; recipient != payload.Recipient {
+		t.Errorf("Recipient mismatch: got %q, want %q", recipient, payload.Recipient)
 	}
-	if decrypted.SubjectHash != payload.SubjectHash {
-		t.Errorf("SubjectHash mismatch: got %q, want %q", decrypted.SubjectHash, payload.SubjectHash)
+
+	if subjectHash := decrypted.SubjectHash; subjectHash != payload.SubjectHash {
+		t.Errorf("SubjectHash mismatch: got %q, want %q", subjectHash, payload.SubjectHash)
 	}
-	if decrypted.SentAt != payload.SentAt {
-		t.Errorf("SentAt mismatch: got %d, want %d", decrypted.SentAt, payload.SentAt)
+
+	if sentAt := decrypted.SentAt; sentAt != payload.SentAt {
+		t.Errorf("SentAt mismatch: got %d, want %d", sentAt, payload.SentAt)
 	}
 }
 

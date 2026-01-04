@@ -18,13 +18,15 @@ func TestGeneratePixelURL(t *testing.T) {
 		t.Fatalf("GeneratePixelURL failed: %v", err)
 	}
 
-	if !strings.HasPrefix(pixelURL, "https://test.workers.dev/p/") {
+	if hasPrefix := strings.HasPrefix(pixelURL, "https://test.workers.dev/p/"); !hasPrefix {
 		t.Errorf("Unexpected URL prefix: %s", pixelURL)
 	}
-	if !strings.HasSuffix(pixelURL, ".gif") {
+
+	if hasSuffix := strings.HasSuffix(pixelURL, ".gif"); !hasSuffix {
 		t.Errorf("URL should end with .gif: %s", pixelURL)
 	}
-	if blob == "" {
+
+	if isEmpty := blob == ""; isEmpty {
 		t.Error("Blob should not be empty")
 	}
 }
@@ -41,29 +43,30 @@ func TestGeneratePixelURLNotConfigured(t *testing.T) {
 func TestGeneratePixelHTML(t *testing.T) {
 	html := GeneratePixelHTML("https://test.workers.dev/p/abc123.gif")
 
-	if !strings.Contains(html, `src="https://test.workers.dev/p/abc123.gif"`) {
+	if hasSrc := strings.Contains(html, `src="https://test.workers.dev/p/abc123.gif"`); !hasSrc {
 		t.Errorf("HTML missing src: %s", html)
 	}
-	if !strings.Contains(html, `width="1"`) {
+
+	if hasWidth := strings.Contains(html, `width="1"`); !hasWidth {
 		t.Errorf("HTML missing width: %s", html)
 	}
-	if !strings.Contains(html, `style="display:none`) {
+
+	if hasStyle := strings.Contains(html, `style="display:none`); !hasStyle {
 		t.Errorf("HTML missing display:none: %s", html)
 	}
 }
 
 func TestHashSubjectConsistent(t *testing.T) {
 	h1 := hashSubject("Hello World")
-	h2 := hashSubject("Hello World")
-	h3 := hashSubject("Different Subject")
-
-	if h1 != h2 {
+	if h2 := hashSubject("Hello World"); h1 != h2 {
 		t.Error("Same subject should produce same hash")
 	}
-	if h1 == h3 {
+
+	if h3 := hashSubject("Different Subject"); h1 == h3 {
 		t.Error("Different subjects should produce different hashes")
 	}
-	if len(h1) != 6 {
-		t.Errorf("Hash should be 6 chars, got %d", len(h1))
+
+	if hashLen := len(h1); hashLen != 6 {
+		t.Errorf("Hash should be 6 chars, got %d", hashLen)
 	}
 }
