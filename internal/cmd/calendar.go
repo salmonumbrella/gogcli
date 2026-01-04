@@ -216,18 +216,21 @@ func (c *CalendarEventCmd) Run(ctx context.Context, flags *RootFlags) error {
 }
 
 type CalendarCreateCmd struct {
-	CalendarID   string `arg:"" name:"calendarId" help:"Calendar ID"`
-	Summary      string `name:"summary" help:"Event summary/title"`
-	From         string `name:"from" help:"Start time (RFC3339)"`
-	To           string `name:"to" help:"End time (RFC3339)"`
-	Description  string `name:"description" help:"Description"`
-	Location     string `name:"location" help:"Location"`
-	Attendees    string `name:"attendees" help:"Comma-separated attendee emails"`
-	AllDay       bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
-	ColorId      string `name:"color" help:"Event color ID (1-11). Use 'gog calendar colors' to see available colors."`
-	Visibility   string `name:"visibility" help:"Event visibility: default, public, private, confidential"`
-	Transparency string `name:"transparency" help:"Show as busy (opaque) or free (transparent). Aliases: busy, free"`
-	SendUpdates  string `name:"send-updates" help:"Notification mode: all, externalOnly, none (default: all)"`
+	CalendarID            string `arg:"" name:"calendarId" help:"Calendar ID"`
+	Summary               string `name:"summary" help:"Event summary/title"`
+	From                  string `name:"from" help:"Start time (RFC3339)"`
+	To                    string `name:"to" help:"End time (RFC3339)"`
+	Description           string `name:"description" help:"Description"`
+	Location              string `name:"location" help:"Location"`
+	Attendees             string `name:"attendees" help:"Comma-separated attendee emails"`
+	AllDay                bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
+	ColorId               string `name:"color" help:"Event color ID (1-11). Use 'gog calendar colors' to see available colors."`
+	Visibility            string `name:"visibility" help:"Event visibility: default, public, private, confidential"`
+	Transparency          string `name:"transparency" help:"Show as busy (opaque) or free (transparent). Aliases: busy, free"`
+	SendUpdates           string `name:"send-updates" help:"Notification mode: all, externalOnly, none (default: all)"`
+	GuestsCanInviteOthers *bool  `name:"guests-can-invite" help:"Allow guests to invite others"`
+	GuestsCanModify       *bool  `name:"guests-can-modify" help:"Allow guests to modify event"`
+	GuestsCanSeeOthers    *bool  `name:"guests-can-see-others" help:"Allow guests to see other guests"`
 }
 
 func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
@@ -278,6 +281,15 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 		Visibility:   visibility,
 		Transparency: transparency,
 	}
+	if c.GuestsCanInviteOthers != nil {
+		event.GuestsCanInviteOthers = *c.GuestsCanInviteOthers
+	}
+	if c.GuestsCanModify != nil {
+		event.GuestsCanModify = *c.GuestsCanModify
+	}
+	if c.GuestsCanSeeOthers != nil {
+		event.GuestsCanSeeOtherGuests = *c.GuestsCanSeeOthers
+	}
 
 	call := svc.Events.Insert(calendarID, event)
 	if sendUpdates != "" {
@@ -295,18 +307,21 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 }
 
 type CalendarUpdateCmd struct {
-	CalendarID   string `arg:"" name:"calendarId" help:"Calendar ID"`
-	EventID      string `arg:"" name:"eventId" help:"Event ID"`
-	Summary      string `name:"summary" help:"New summary/title (set empty to clear)"`
-	From         string `name:"from" help:"New start time (RFC3339; set empty to clear)"`
-	To           string `name:"to" help:"New end time (RFC3339; set empty to clear)"`
-	Description  string `name:"description" help:"New description (set empty to clear)"`
-	Location     string `name:"location" help:"New location (set empty to clear)"`
-	Attendees    string `name:"attendees" help:"Comma-separated attendee emails (set empty to clear)"`
-	AllDay       bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
-	ColorId      string `name:"color" help:"Event color ID (1-11, or empty to clear)"`
-	Visibility   string `name:"visibility" help:"Event visibility: default, public, private, confidential"`
-	Transparency string `name:"transparency" help:"Show as busy (opaque) or free (transparent). Aliases: busy, free"`
+	CalendarID            string `arg:"" name:"calendarId" help:"Calendar ID"`
+	EventID               string `arg:"" name:"eventId" help:"Event ID"`
+	Summary               string `name:"summary" help:"New summary/title (set empty to clear)"`
+	From                  string `name:"from" help:"New start time (RFC3339; set empty to clear)"`
+	To                    string `name:"to" help:"New end time (RFC3339; set empty to clear)"`
+	Description           string `name:"description" help:"New description (set empty to clear)"`
+	Location              string `name:"location" help:"New location (set empty to clear)"`
+	Attendees             string `name:"attendees" help:"Comma-separated attendee emails (set empty to clear)"`
+	AllDay                bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
+	ColorId               string `name:"color" help:"Event color ID (1-11, or empty to clear)"`
+	Visibility            string `name:"visibility" help:"Event visibility: default, public, private, confidential"`
+	Transparency          string `name:"transparency" help:"Show as busy (opaque) or free (transparent). Aliases: busy, free"`
+	GuestsCanInviteOthers *bool  `name:"guests-can-invite" help:"Allow guests to invite others"`
+	GuestsCanModify       *bool  `name:"guests-can-modify" help:"Allow guests to modify event"`
+	GuestsCanSeeOthers    *bool  `name:"guests-can-see-others" help:"Allow guests to see other guests"`
 }
 
 func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *RootFlags) error {
@@ -379,6 +394,27 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *
 			return transErr
 		}
 		patch.Transparency = transparency
+		changed = true
+	}
+	if flagProvided(kctx, "guests-can-invite") {
+		if c.GuestsCanInviteOthers != nil {
+			patch.GuestsCanInviteOthers = *c.GuestsCanInviteOthers
+		}
+		patch.ForceSendFields = append(patch.ForceSendFields, "GuestsCanInviteOthers")
+		changed = true
+	}
+	if flagProvided(kctx, "guests-can-modify") {
+		if c.GuestsCanModify != nil {
+			patch.GuestsCanModify = *c.GuestsCanModify
+		}
+		patch.ForceSendFields = append(patch.ForceSendFields, "GuestsCanModify")
+		changed = true
+	}
+	if flagProvided(kctx, "guests-can-see-others") {
+		if c.GuestsCanSeeOthers != nil {
+			patch.GuestsCanSeeOtherGuests = *c.GuestsCanSeeOthers
+		}
+		patch.ForceSendFields = append(patch.ForceSendFields, "GuestsCanSeeOtherGuests")
 		changed = true
 	}
 	if !changed {
@@ -643,6 +679,15 @@ func printCalendarEvent(u *ui.UI, event *calendar.Event) {
 	}
 	if event.Transparency == "transparent" {
 		u.Out().Printf("show-as\tfree")
+	}
+	if !event.GuestsCanInviteOthers {
+		u.Out().Printf("guests-can-invite\tfalse")
+	}
+	if event.GuestsCanModify {
+		u.Out().Printf("guests-can-modify\ttrue")
+	}
+	if !event.GuestsCanSeeOtherGuests {
+		u.Out().Printf("guests-can-see-others\tfalse")
 	}
 	if len(event.Attendees) > 0 {
 		emails := []string{}
