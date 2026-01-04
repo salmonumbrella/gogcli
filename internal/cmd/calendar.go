@@ -231,6 +231,7 @@ type CalendarCreateCmd struct {
 	GuestsCanInviteOthers *bool  `name:"guests-can-invite" help:"Allow guests to invite others"`
 	GuestsCanModify       *bool  `name:"guests-can-modify" help:"Allow guests to modify event"`
 	GuestsCanSeeOthers    *bool  `name:"guests-can-see-others" help:"Allow guests to see other guests"`
+	WithMeet              bool   `name:"with-meet" help:"Create a Google Meet video conference for this event"`
 }
 
 func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
@@ -271,15 +272,16 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 	}
 
 	event := &calendar.Event{
-		Summary:      strings.TrimSpace(c.Summary),
-		Description:  strings.TrimSpace(c.Description),
-		Location:     strings.TrimSpace(c.Location),
-		Start:        buildEventDateTime(c.From, c.AllDay),
-		End:          buildEventDateTime(c.To, c.AllDay),
-		Attendees:    buildAttendees(c.Attendees),
-		ColorId:      colorId,
-		Visibility:   visibility,
-		Transparency: transparency,
+		Summary:        strings.TrimSpace(c.Summary),
+		Description:    strings.TrimSpace(c.Description),
+		Location:       strings.TrimSpace(c.Location),
+		Start:          buildEventDateTime(c.From, c.AllDay),
+		End:            buildEventDateTime(c.To, c.AllDay),
+		Attendees:      buildAttendees(c.Attendees),
+		ColorId:        colorId,
+		Visibility:     visibility,
+		Transparency:   transparency,
+		ConferenceData: buildConferenceData(c.WithMeet),
 	}
 	if c.GuestsCanInviteOthers != nil {
 		event.GuestsCanInviteOthers = *c.GuestsCanInviteOthers
@@ -294,6 +296,9 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 	call := svc.Events.Insert(calendarID, event)
 	if sendUpdates != "" {
 		call = call.SendUpdates(sendUpdates)
+	}
+	if c.WithMeet {
+		call = call.ConferenceDataVersion(1)
 	}
 	created, err := call.Do()
 	if err != nil {
@@ -689,6 +694,16 @@ func printCalendarEvent(u *ui.UI, event *calendar.Event) {
 	if !event.GuestsCanSeeOtherGuests {
 		u.Out().Printf("guests-can-see-others\tfalse")
 	}
+	if event.HangoutLink != "" {
+		u.Out().Printf("meet\t%s", event.HangoutLink)
+	}
+	if event.ConferenceData != nil && len(event.ConferenceData.EntryPoints) > 0 {
+		for _, ep := range event.ConferenceData.EntryPoints {
+			if ep.EntryPointType == "video" {
+				u.Out().Printf("video-link\t%s", ep.Uri)
+			}
+		}
+	}
 	if len(event.Attendees) > 0 {
 		emails := []string{}
 		for _, a := range event.Attendees {
@@ -711,6 +726,20 @@ func buildEventDateTime(value string, allDay bool) *calendar.EventDateTime {
 		return &calendar.EventDateTime{Date: value}
 	}
 	return &calendar.EventDateTime{DateTime: value}
+}
+
+func buildConferenceData(withMeet bool) *calendar.ConferenceData {
+	if !withMeet {
+		return nil
+	}
+	return &calendar.ConferenceData{
+		CreateRequest: &calendar.CreateConferenceRequest{
+			RequestId: fmt.Sprintf("gogcli-%d", time.Now().UnixNano()),
+			ConferenceSolutionKey: &calendar.ConferenceSolutionKey{
+				Type: "hangoutsMeet",
+			},
+		},
+	}
 }
 
 func buildAttendees(csv string) []*calendar.EventAttendee {
