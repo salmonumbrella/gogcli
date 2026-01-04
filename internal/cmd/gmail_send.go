@@ -133,8 +133,8 @@ func (c *GmailSendCmd) Run(ctx context.Context, flags *RootFlags) error {
 			return fmt.Errorf("--track requires --body-html (pixel must be in HTML)")
 		}
 
-		// Use first recipient for tracking
-		firstRecipient := strings.Split(c.To, ",")[0]
+		// Use first resolved recipient for tracking
+		firstRecipient := toRecipients[0]
 		pixelURL, blob, err := tracking.GeneratePixelURL(trackingCfg, strings.TrimSpace(firstRecipient), c.Subject)
 		if err != nil {
 			return fmt.Errorf("generate tracking pixel: %w", err)
