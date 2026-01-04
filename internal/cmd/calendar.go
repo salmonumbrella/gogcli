@@ -383,7 +383,9 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *
 			return usage("--original-start required when --scope=single")
 		}
 	case scopeFuture:
-		return fmt.Errorf("scope=future is not supported yet")
+		if strings.TrimSpace(c.OriginalStartTime) == "" {
+			return usage("--original-start required when --scope=future")
+		}
 	case scopeAll:
 	default:
 		return fmt.Errorf("invalid scope: %q (must be single, future, or all)", scope)
@@ -481,7 +483,19 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *
 	}
 
 	targetEventID := eventID
-	if scope == scopeSingle {
+	var parentRecurrence []string
+	if scope == scopeFuture {
+		parent, getErr := svc.Events.Get(calendarID, eventID).Context(ctx).Do()
+		if getErr != nil {
+			return getErr
+		}
+		if len(parent.Recurrence) == 0 {
+			return fmt.Errorf("event %s is not a recurring event", eventID)
+		}
+		parentRecurrence = parent.Recurrence
+		patch.Recurrence = parentRecurrence
+	}
+	if scope == scopeSingle || scope == scopeFuture {
 		instanceID, resolveErr := resolveRecurringInstanceID(ctx, svc, calendarID, eventID, c.OriginalStartTime)
 		if resolveErr != nil {
 			return resolveErr
@@ -492,6 +506,16 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *
 	updated, err := svc.Events.Patch(calendarID, targetEventID, patch).Do()
 	if err != nil {
 		return err
+	}
+	if scope == scopeFuture {
+		truncated, truncateErr := truncateRecurrence(parentRecurrence, c.OriginalStartTime)
+		if truncateErr != nil {
+			return truncateErr
+		}
+		_, patchErr := svc.Events.Patch(calendarID, eventID, &calendar.Event{Recurrence: truncated}).Context(ctx).Do()
+		if patchErr != nil {
+			return patchErr
+		}
 	}
 	if outfmt.IsJSON(ctx) {
 		return outfmt.WriteJSON(os.Stdout, map[string]any{"event": updated})
@@ -532,7 +556,9 @@ func (c *CalendarDeleteCmd) Run(ctx context.Context, flags *RootFlags) error {
 			return usage("--original-start required when --scope=single")
 		}
 	case scopeFuture:
-		return fmt.Errorf("scope=future is not supported yet")
+		if strings.TrimSpace(c.OriginalStartTime) == "" {
+			return usage("--original-start required when --scope=future")
+		}
 	case scopeAll:
 	default:
 		return fmt.Errorf("invalid scope: %q (must be single, future, or all)", scope)
@@ -541,6 +567,9 @@ func (c *CalendarDeleteCmd) Run(ctx context.Context, flags *RootFlags) error {
 	confirmMessage := fmt.Sprintf("delete event %s from calendar %s", eventID, calendarID)
 	if scope == scopeSingle {
 		confirmMessage = fmt.Sprintf("delete event %s (instance start %s) from calendar %s", eventID, c.OriginalStartTime, calendarID)
+	}
+	if scope == scopeFuture {
+		confirmMessage = fmt.Sprintf("delete event %s (instance start %s) and all following from calendar %s", eventID, c.OriginalStartTime, calendarID)
 	}
 	if confirmErr := confirmDestructive(ctx, flags, confirmMessage); confirmErr != nil {
 		return confirmErr
@@ -552,7 +581,18 @@ func (c *CalendarDeleteCmd) Run(ctx context.Context, flags *RootFlags) error {
 	}
 
 	targetEventID := eventID
-	if scope == scopeSingle {
+	var parentRecurrence []string
+	if scope == scopeFuture {
+		parent, getErr := svc.Events.Get(calendarID, eventID).Context(ctx).Do()
+		if getErr != nil {
+			return getErr
+		}
+		if len(parent.Recurrence) == 0 {
+			return fmt.Errorf("event %s is not a recurring event", eventID)
+		}
+		parentRecurrence = parent.Recurrence
+	}
+	if scope == scopeSingle || scope == scopeFuture {
 		instanceID, resolveErr := resolveRecurringInstanceID(ctx, svc, calendarID, eventID, c.OriginalStartTime)
 		if resolveErr != nil {
 			return resolveErr
@@ -562,6 +602,16 @@ func (c *CalendarDeleteCmd) Run(ctx context.Context, flags *RootFlags) error {
 
 	if err := svc.Events.Delete(calendarID, targetEventID).Do(); err != nil {
 		return err
+	}
+	if scope == scopeFuture {
+		truncated, truncateErr := truncateRecurrence(parentRecurrence, c.OriginalStartTime)
+		if truncateErr != nil {
+			return truncateErr
+		}
+		_, patchErr := svc.Events.Patch(calendarID, eventID, &calendar.Event{Recurrence: truncated}).Context(ctx).Do()
+		if patchErr != nil {
+			return patchErr
+		}
 	}
 	if outfmt.IsJSON(ctx) {
 		return outfmt.WriteJSON(os.Stdout, map[string]any{
@@ -1008,6 +1058,76 @@ func originalStartRange(originalStart string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid original start date %q", originalStart)
 	}
 	return parsed.Format(time.RFC3339), parsed.Add(24 * time.Hour).Format(time.RFC3339), nil
+}
+
+func truncateRecurrence(rules []string, originalStart string) ([]string, error) {
+	if len(rules) == 0 {
+		return nil, fmt.Errorf("recurrence rules missing")
+	}
+	untilValue, err := recurrenceUntil(originalStart)
+	if err != nil {
+		return nil, err
+	}
+
+	updated := make([]string, 0, len(rules))
+	foundRule := false
+	for _, rule := range rules {
+		trimmed := strings.TrimSpace(rule)
+		upper := strings.ToUpper(trimmed)
+		if !strings.HasPrefix(upper, "RRULE") {
+			updated = append(updated, trimmed)
+			continue
+		}
+		foundRule = true
+		body := strings.TrimPrefix(trimmed, "RRULE:")
+		if body == trimmed {
+			body = strings.TrimPrefix(trimmed, "RRULE")
+			body = strings.TrimPrefix(body, ":")
+		}
+		parts := strings.Split(body, ";")
+		filtered := make([]string, 0, len(parts)+1)
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			upperPart := strings.ToUpper(part)
+			if strings.HasPrefix(upperPart, "UNTIL=") || strings.HasPrefix(upperPart, "COUNT=") {
+				continue
+			}
+			filtered = append(filtered, part)
+		}
+		filtered = append(filtered, "UNTIL="+untilValue)
+		updated = append(updated, "RRULE:"+strings.Join(filtered, ";"))
+	}
+	if !foundRule {
+		return nil, fmt.Errorf("recurrence has no RRULE")
+	}
+	return updated, nil
+}
+
+func recurrenceUntil(originalStart string) (string, error) {
+	originalStart = strings.TrimSpace(originalStart)
+	if originalStart == "" {
+		return "", fmt.Errorf("original start time required")
+	}
+	if strings.Contains(originalStart, "T") {
+		parsed, err := time.Parse(time.RFC3339, originalStart)
+		if err != nil {
+			parsed, err = time.Parse(time.RFC3339Nano, originalStart)
+		}
+		if err != nil {
+			return "", fmt.Errorf("invalid original start time %q", originalStart)
+		}
+		until := parsed.Add(-time.Second).UTC()
+		return until.Format("20060102T150405Z"), nil
+	}
+	parsed, err := time.Parse("2006-01-02", originalStart)
+	if err != nil {
+		return "", fmt.Errorf("invalid original start date %q", originalStart)
+	}
+	until := parsed.AddDate(0, 0, -1)
+	return until.Format("20060102"), nil
 }
 
 func buildAttendees(csv string) []*calendar.EventAttendee {

@@ -179,3 +179,41 @@ func TestParseAttendee(t *testing.T) {
 		})
 	}
 }
+
+func TestRecurrenceUntil(t *testing.T) {
+	got, err := recurrenceUntil("2025-01-10")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "20250109" {
+		t.Fatalf("unexpected until date: %s", got)
+	}
+
+	got, err = recurrenceUntil("2025-01-10T12:00:00Z")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "20250110T115959Z" {
+		t.Fatalf("unexpected until datetime: %s", got)
+	}
+}
+
+func TestTruncateRecurrence(t *testing.T) {
+	rules := []string{
+		"RRULE:FREQ=WEEKLY;COUNT=10",
+		"EXDATE:20250101T100000Z",
+	}
+	truncated, err := truncateRecurrence(rules, "2025-01-10T12:00:00Z")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(truncated) != 2 {
+		t.Fatalf("unexpected rule count: %#v", truncated)
+	}
+	if truncated[0] != "RRULE:FREQ=WEEKLY;UNTIL=20250110T115959Z" {
+		t.Fatalf("unexpected RRULE: %s", truncated[0])
+	}
+	if truncated[1] != "EXDATE:20250101T100000Z" {
+		t.Fatalf("unexpected EXDATE: %s", truncated[1])
+	}
+}
