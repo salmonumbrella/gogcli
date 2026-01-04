@@ -219,24 +219,25 @@ func (c *CalendarEventCmd) Run(ctx context.Context, flags *RootFlags) error {
 }
 
 type CalendarCreateCmd struct {
-	CalendarID            string `arg:"" name:"calendarId" help:"Calendar ID"`
-	Summary               string `name:"summary" help:"Event summary/title"`
-	From                  string `name:"from" help:"Start time (RFC3339)"`
-	To                    string `name:"to" help:"End time (RFC3339)"`
-	Description           string `name:"description" help:"Description"`
-	Location              string `name:"location" help:"Location"`
-	Attendees             string `name:"attendees" help:"Comma-separated attendee emails"`
-	AllDay                bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
-	ColorId               string `name:"color" help:"Event color ID (1-11). Use 'gog calendar colors' to see available colors."`
-	Visibility            string `name:"visibility" help:"Event visibility: default, public, private, confidential"`
-	Transparency          string `name:"transparency" help:"Show as busy (opaque) or free (transparent). Aliases: busy, free"`
-	SendUpdates           string `name:"send-updates" help:"Notification mode: all, externalOnly, none (default: all)"`
-	GuestsCanInviteOthers *bool  `name:"guests-can-invite" help:"Allow guests to invite others"`
-	GuestsCanModify       *bool  `name:"guests-can-modify" help:"Allow guests to modify event"`
-	GuestsCanSeeOthers    *bool  `name:"guests-can-see-others" help:"Allow guests to see other guests"`
-	WithMeet              bool   `name:"with-meet" help:"Create a Google Meet video conference for this event"`
-	SourceUrl             string `name:"source-url" help:"URL where event was created/imported from"`
-	SourceTitle           string `name:"source-title" help:"Title of the source"`
+	CalendarID            string   `arg:"" name:"calendarId" help:"Calendar ID"`
+	Summary               string   `name:"summary" help:"Event summary/title"`
+	From                  string   `name:"from" help:"Start time (RFC3339)"`
+	To                    string   `name:"to" help:"End time (RFC3339)"`
+	Description           string   `name:"description" help:"Description"`
+	Location              string   `name:"location" help:"Location"`
+	Attendees             string   `name:"attendees" help:"Comma-separated attendee emails"`
+	AllDay                bool     `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
+	ColorId               string   `name:"color" help:"Event color ID (1-11). Use 'gog calendar colors' to see available colors."`
+	Visibility            string   `name:"visibility" help:"Event visibility: default, public, private, confidential"`
+	Transparency          string   `name:"transparency" help:"Show as busy (opaque) or free (transparent). Aliases: busy, free"`
+	SendUpdates           string   `name:"send-updates" help:"Notification mode: all, externalOnly, none (default: all)"`
+	GuestsCanInviteOthers *bool    `name:"guests-can-invite" help:"Allow guests to invite others"`
+	GuestsCanModify       *bool    `name:"guests-can-modify" help:"Allow guests to modify event"`
+	GuestsCanSeeOthers    *bool    `name:"guests-can-see-others" help:"Allow guests to see other guests"`
+	WithMeet              bool     `name:"with-meet" help:"Create a Google Meet video conference for this event"`
+	SourceUrl             string   `name:"source-url" help:"URL where event was created/imported from"`
+	SourceTitle           string   `name:"source-title" help:"Title of the source"`
+	Attachments           []string `name:"attachment" help:"File attachment URL (can be repeated)"`
 }
 
 func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
@@ -287,6 +288,7 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 		Visibility:     visibility,
 		Transparency:   transparency,
 		ConferenceData: buildConferenceData(c.WithMeet),
+		Attachments:    buildAttachments(c.Attachments),
 	}
 	if c.GuestsCanInviteOthers != nil {
 		event.GuestsCanInviteOthers = c.GuestsCanInviteOthers
@@ -310,6 +312,9 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 	}
 	if c.WithMeet {
 		call = call.ConferenceDataVersion(1)
+	}
+	if len(event.Attachments) > 0 {
+		call = call.SupportsAttachments(true)
 	}
 	created, err := call.Do()
 	if err != nil {
@@ -820,6 +825,20 @@ func buildRecurrence(rules []string) []string {
 		r = strings.TrimSpace(r)
 		if r != "" {
 			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func buildAttachments(urls []string) []*calendar.EventAttachment {
+	if len(urls) == 0 {
+		return nil
+	}
+	out := make([]*calendar.EventAttachment, 0, len(urls))
+	for _, u := range urls {
+		u = strings.TrimSpace(u)
+		if u != "" {
+			out = append(out, &calendar.EventAttachment{FileUrl: u})
 		}
 	}
 	return out
