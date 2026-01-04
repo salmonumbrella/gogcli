@@ -238,6 +238,8 @@ type CalendarCreateCmd struct {
 	SourceUrl             string   `name:"source-url" help:"URL where event was created/imported from"`
 	SourceTitle           string   `name:"source-title" help:"Title of the source"`
 	Attachments           []string `name:"attachment" help:"File attachment URL (can be repeated)"`
+	PrivateProps          []string `name:"private-prop" help:"Private extended property (key=value, can be repeated)"`
+	SharedProps           []string `name:"shared-prop" help:"Shared extended property (key=value, can be repeated)"`
 }
 
 func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
@@ -278,17 +280,18 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 	}
 
 	event := &calendar.Event{
-		Summary:        strings.TrimSpace(c.Summary),
-		Description:    strings.TrimSpace(c.Description),
-		Location:       strings.TrimSpace(c.Location),
-		Start:          buildEventDateTime(c.From, c.AllDay),
-		End:            buildEventDateTime(c.To, c.AllDay),
-		Attendees:      buildAttendees(c.Attendees),
-		ColorId:        colorId,
-		Visibility:     visibility,
-		Transparency:   transparency,
-		ConferenceData: buildConferenceData(c.WithMeet),
-		Attachments:    buildAttachments(c.Attachments),
+		Summary:            strings.TrimSpace(c.Summary),
+		Description:        strings.TrimSpace(c.Description),
+		Location:           strings.TrimSpace(c.Location),
+		Start:              buildEventDateTime(c.From, c.AllDay),
+		End:                buildEventDateTime(c.To, c.AllDay),
+		Attendees:          buildAttendees(c.Attendees),
+		ColorId:            colorId,
+		Visibility:         visibility,
+		Transparency:       transparency,
+		ConferenceData:     buildConferenceData(c.WithMeet),
+		Attachments:        buildAttachments(c.Attachments),
+		ExtendedProperties: buildExtendedProperties(c.PrivateProps, c.SharedProps),
 	}
 	if c.GuestsCanInviteOthers != nil {
 		event.GuestsCanInviteOthers = c.GuestsCanInviteOthers
@@ -328,23 +331,25 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 }
 
 type CalendarUpdateCmd struct {
-	CalendarID            string `arg:"" name:"calendarId" help:"Calendar ID"`
-	EventID               string `arg:"" name:"eventId" help:"Event ID"`
-	Summary               string `name:"summary" help:"New summary/title (set empty to clear)"`
-	From                  string `name:"from" help:"New start time (RFC3339; set empty to clear)"`
-	To                    string `name:"to" help:"New end time (RFC3339; set empty to clear)"`
-	Description           string `name:"description" help:"New description (set empty to clear)"`
-	Location              string `name:"location" help:"New location (set empty to clear)"`
-	Attendees             string `name:"attendees" help:"Comma-separated attendee emails (set empty to clear)"`
-	AllDay                bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
-	ColorId               string `name:"color" help:"Event color ID (1-11, or empty to clear)"`
-	Visibility            string `name:"visibility" help:"Event visibility: default, public, private, confidential"`
-	Transparency          string `name:"transparency" help:"Show as busy (opaque) or free (transparent). Aliases: busy, free"`
-	GuestsCanInviteOthers *bool  `name:"guests-can-invite" help:"Allow guests to invite others"`
-	GuestsCanModify       *bool  `name:"guests-can-modify" help:"Allow guests to modify event"`
-	GuestsCanSeeOthers    *bool  `name:"guests-can-see-others" help:"Allow guests to see other guests"`
-	Scope                 string `name:"scope" help:"For recurring events: single, future, all" default:"all"`
-	OriginalStartTime     string `name:"original-start" help:"Original start time of instance (required for scope=single)"`
+	CalendarID            string   `arg:"" name:"calendarId" help:"Calendar ID"`
+	EventID               string   `arg:"" name:"eventId" help:"Event ID"`
+	Summary               string   `name:"summary" help:"New summary/title (set empty to clear)"`
+	From                  string   `name:"from" help:"New start time (RFC3339; set empty to clear)"`
+	To                    string   `name:"to" help:"New end time (RFC3339; set empty to clear)"`
+	Description           string   `name:"description" help:"New description (set empty to clear)"`
+	Location              string   `name:"location" help:"New location (set empty to clear)"`
+	Attendees             string   `name:"attendees" help:"Comma-separated attendee emails (set empty to clear)"`
+	AllDay                bool     `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
+	ColorId               string   `name:"color" help:"Event color ID (1-11, or empty to clear)"`
+	Visibility            string   `name:"visibility" help:"Event visibility: default, public, private, confidential"`
+	Transparency          string   `name:"transparency" help:"Show as busy (opaque) or free (transparent). Aliases: busy, free"`
+	GuestsCanInviteOthers *bool    `name:"guests-can-invite" help:"Allow guests to invite others"`
+	GuestsCanModify       *bool    `name:"guests-can-modify" help:"Allow guests to modify event"`
+	GuestsCanSeeOthers    *bool    `name:"guests-can-see-others" help:"Allow guests to see other guests"`
+	Scope                 string   `name:"scope" help:"For recurring events: single, future, all" default:"all"`
+	OriginalStartTime     string   `name:"original-start" help:"Original start time of instance (required for scope=single)"`
+	PrivateProps          []string `name:"private-prop" help:"Private extended property (key=value, can be repeated)"`
+	SharedProps           []string `name:"shared-prop" help:"Shared extended property (key=value, can be repeated)"`
 }
 
 func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *RootFlags) error {
@@ -454,6 +459,10 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *
 			patch.GuestsCanSeeOtherGuests = c.GuestsCanSeeOthers
 		}
 		patch.ForceSendFields = append(patch.ForceSendFields, "GuestsCanSeeOtherGuests")
+		changed = true
+	}
+	if flagProvided(kctx, "private-prop") || flagProvided(kctx, "shared-prop") {
+		patch.ExtendedProperties = buildExtendedProperties(c.PrivateProps, c.SharedProps)
 		changed = true
 	}
 	if !changed {
@@ -842,6 +851,33 @@ func buildAttachments(urls []string) []*calendar.EventAttachment {
 		}
 	}
 	return out
+}
+
+func buildExtendedProperties(privateProps, sharedProps []string) *calendar.EventExtendedProperties {
+	if len(privateProps) == 0 && len(sharedProps) == 0 {
+		return nil
+	}
+	props := &calendar.EventExtendedProperties{}
+
+	if len(privateProps) > 0 {
+		props.Private = make(map[string]string)
+		for _, p := range privateProps {
+			if k, v, ok := strings.Cut(p, "="); ok {
+				props.Private[strings.TrimSpace(k)] = strings.TrimSpace(v)
+			}
+		}
+	}
+
+	if len(sharedProps) > 0 {
+		props.Shared = make(map[string]string)
+		for _, p := range sharedProps {
+			if k, v, ok := strings.Cut(p, "="); ok {
+				props.Shared[strings.TrimSpace(k)] = strings.TrimSpace(v)
+			}
+		}
+	}
+
+	return props
 }
 
 func resolveRecurringInstanceID(ctx context.Context, svc *calendar.Service, calendarID, recurringEventID, originalStart string) (string, error) {
