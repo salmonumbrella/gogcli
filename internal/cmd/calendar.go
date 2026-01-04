@@ -532,23 +532,26 @@ func (c *CalendarDeleteCmd) Run(ctx context.Context, flags *RootFlags) error {
 		return fmt.Errorf("invalid scope: %q (must be single, future, or all)", scope)
 	}
 
-	targetEventID := eventID
+	confirmMessage := fmt.Sprintf("delete event %s from calendar %s", eventID, calendarID)
+	if scope == "single" {
+		confirmMessage = fmt.Sprintf("delete event %s (instance start %s) from calendar %s", eventID, c.OriginalStartTime, calendarID)
+	}
+	if confirmErr := confirmDestructive(ctx, flags, confirmMessage); confirmErr != nil {
+		return confirmErr
+	}
 
 	svc, err := newCalendarService(ctx, account)
 	if err != nil {
 		return err
 	}
 
+	targetEventID := eventID
 	if scope == "single" {
 		instanceID, err := resolveRecurringInstanceID(ctx, svc, calendarID, eventID, c.OriginalStartTime)
 		if err != nil {
 			return err
 		}
 		targetEventID = instanceID
-	}
-
-	if confirmErr := confirmDestructive(ctx, flags, fmt.Sprintf("delete event %s from calendar %s", targetEventID, calendarID)); confirmErr != nil {
-		return confirmErr
 	}
 
 	if err := svc.Events.Delete(calendarID, targetEventID).Do(); err != nil {
