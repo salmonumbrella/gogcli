@@ -235,6 +235,8 @@ type CalendarCreateCmd struct {
 	GuestsCanModify       *bool  `name:"guests-can-modify" help:"Allow guests to modify event"`
 	GuestsCanSeeOthers    *bool  `name:"guests-can-see-others" help:"Allow guests to see other guests"`
 	WithMeet              bool   `name:"with-meet" help:"Create a Google Meet video conference for this event"`
+	SourceUrl             string `name:"source-url" help:"URL where event was created/imported from"`
+	SourceTitle           string `name:"source-title" help:"Title of the source"`
 }
 
 func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
@@ -294,6 +296,12 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 	}
 	if c.GuestsCanSeeOthers != nil {
 		event.GuestsCanSeeOtherGuests = c.GuestsCanSeeOthers
+	}
+	if strings.TrimSpace(c.SourceUrl) != "" {
+		event.Source = &calendar.EventSource{
+			Url:   strings.TrimSpace(c.SourceUrl),
+			Title: strings.TrimSpace(c.SourceTitle),
+		}
 	}
 
 	call := svc.Events.Insert(calendarID, event)
@@ -717,6 +725,9 @@ func printCalendarEvent(u *ui.UI, event *calendar.Event) {
 		if len(emails) > 0 {
 			u.Out().Printf("attendees\t%s", strings.Join(emails, ", "))
 		}
+	}
+	if event.Source != nil && event.Source.Url != "" {
+		u.Out().Printf("source\t%s (%s)", event.Source.Url, event.Source.Title)
 	}
 	if event.HtmlLink != "" {
 		u.Out().Printf("link\t%s", event.HtmlLink)
