@@ -90,3 +90,31 @@ func TestValidateVisibility(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateTransparency(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{"opaque", "opaque", false},
+		{"transparent", "transparent", false},
+		{"busy", "opaque", false},
+		{"free", "transparent", false},
+		{"OPAQUE", "opaque", false},
+		{"", "", false},
+		{"invalid", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := validateTransparency(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateTransparency(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("validateTransparency(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

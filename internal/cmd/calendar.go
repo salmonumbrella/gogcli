@@ -216,16 +216,17 @@ func (c *CalendarEventCmd) Run(ctx context.Context, flags *RootFlags) error {
 }
 
 type CalendarCreateCmd struct {
-	CalendarID  string `arg:"" name:"calendarId" help:"Calendar ID"`
-	Summary     string `name:"summary" help:"Event summary/title"`
-	From        string `name:"from" help:"Start time (RFC3339)"`
-	To          string `name:"to" help:"End time (RFC3339)"`
-	Description string `name:"description" help:"Description"`
-	Location    string `name:"location" help:"Location"`
-	Attendees   string `name:"attendees" help:"Comma-separated attendee emails"`
-	AllDay      bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
-	ColorId     string `name:"color" help:"Event color ID (1-11). Use 'gog calendar colors' to see available colors."`
-	Visibility  string `name:"visibility" help:"Event visibility: default, public, private, confidential"`
+	CalendarID   string `arg:"" name:"calendarId" help:"Calendar ID"`
+	Summary      string `name:"summary" help:"Event summary/title"`
+	From         string `name:"from" help:"Start time (RFC3339)"`
+	To           string `name:"to" help:"End time (RFC3339)"`
+	Description  string `name:"description" help:"Description"`
+	Location     string `name:"location" help:"Location"`
+	Attendees    string `name:"attendees" help:"Comma-separated attendee emails"`
+	AllDay       bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
+	ColorId      string `name:"color" help:"Event color ID (1-11). Use 'gog calendar colors' to see available colors."`
+	Visibility   string `name:"visibility" help:"Event visibility: default, public, private, confidential"`
+	Transparency string `name:"transparency" help:"Show as busy (opaque) or free (transparent). Aliases: busy, free"`
 }
 
 func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
@@ -251,6 +252,10 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 	if err != nil {
 		return err
 	}
+	transparency, err := validateTransparency(c.Transparency)
+	if err != nil {
+		return err
+	}
 
 	svc, err := newCalendarService(ctx, account)
 	if err != nil {
@@ -258,14 +263,15 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 	}
 
 	event := &calendar.Event{
-		Summary:     strings.TrimSpace(c.Summary),
-		Description: strings.TrimSpace(c.Description),
-		Location:    strings.TrimSpace(c.Location),
-		Start:       buildEventDateTime(c.From, c.AllDay),
-		End:         buildEventDateTime(c.To, c.AllDay),
-		Attendees:   buildAttendees(c.Attendees),
-		ColorId:     colorId,
-		Visibility:  visibility,
+		Summary:      strings.TrimSpace(c.Summary),
+		Description:  strings.TrimSpace(c.Description),
+		Location:     strings.TrimSpace(c.Location),
+		Start:        buildEventDateTime(c.From, c.AllDay),
+		End:          buildEventDateTime(c.To, c.AllDay),
+		Attendees:    buildAttendees(c.Attendees),
+		ColorId:      colorId,
+		Visibility:   visibility,
+		Transparency: transparency,
 	}
 
 	created, err := svc.Events.Insert(calendarID, event).Do()
@@ -280,17 +286,18 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 }
 
 type CalendarUpdateCmd struct {
-	CalendarID  string `arg:"" name:"calendarId" help:"Calendar ID"`
-	EventID     string `arg:"" name:"eventId" help:"Event ID"`
-	Summary     string `name:"summary" help:"New summary/title (set empty to clear)"`
-	From        string `name:"from" help:"New start time (RFC3339; set empty to clear)"`
-	To          string `name:"to" help:"New end time (RFC3339; set empty to clear)"`
-	Description string `name:"description" help:"New description (set empty to clear)"`
-	Location    string `name:"location" help:"New location (set empty to clear)"`
-	Attendees   string `name:"attendees" help:"Comma-separated attendee emails (set empty to clear)"`
-	AllDay      bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
-	ColorId     string `name:"color" help:"Event color ID (1-11, or empty to clear)"`
-	Visibility  string `name:"visibility" help:"Event visibility: default, public, private, confidential"`
+	CalendarID   string `arg:"" name:"calendarId" help:"Calendar ID"`
+	EventID      string `arg:"" name:"eventId" help:"Event ID"`
+	Summary      string `name:"summary" help:"New summary/title (set empty to clear)"`
+	From         string `name:"from" help:"New start time (RFC3339; set empty to clear)"`
+	To           string `name:"to" help:"New end time (RFC3339; set empty to clear)"`
+	Description  string `name:"description" help:"New description (set empty to clear)"`
+	Location     string `name:"location" help:"New location (set empty to clear)"`
+	Attendees    string `name:"attendees" help:"Comma-separated attendee emails (set empty to clear)"`
+	AllDay       bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
+	ColorId      string `name:"color" help:"Event color ID (1-11, or empty to clear)"`
+	Visibility   string `name:"visibility" help:"Event visibility: default, public, private, confidential"`
+	Transparency string `name:"transparency" help:"Show as busy (opaque) or free (transparent). Aliases: busy, free"`
 }
 
 func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *RootFlags) error {
@@ -355,6 +362,14 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *
 			return visErr
 		}
 		patch.Visibility = visibility
+		changed = true
+	}
+	if flagProvided(kctx, "transparency") {
+		transparency, transErr := validateTransparency(c.Transparency)
+		if transErr != nil {
+			return transErr
+		}
+		patch.Transparency = transparency
 		changed = true
 	}
 	if !changed {
@@ -617,6 +632,9 @@ func printCalendarEvent(u *ui.UI, event *calendar.Event) {
 	if event.Visibility != "" && event.Visibility != "default" {
 		u.Out().Printf("visibility\t%s", event.Visibility)
 	}
+	if event.Transparency == "transparent" {
+		u.Out().Printf("show-as\tfree")
+	}
 	if len(event.Attendees) > 0 {
 		emails := []string{}
 		for _, a := range event.Attendees {
@@ -699,6 +717,23 @@ func validateVisibility(s string) (string, error) {
 		return "", fmt.Errorf("invalid visibility: %q (must be default, public, private, or confidential)", s)
 	}
 	return s, nil
+}
+
+func validateTransparency(s string) (string, error) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" {
+		return "", nil
+	}
+	switch s {
+	case "busy":
+		return "opaque", nil
+	case "free":
+		return "transparent", nil
+	case "opaque", "transparent":
+		return s, nil
+	default:
+		return "", fmt.Errorf("invalid transparency: %q (must be opaque/busy or transparent/free)", s)
+	}
 }
 
 func eventStart(e *calendar.Event) string {
