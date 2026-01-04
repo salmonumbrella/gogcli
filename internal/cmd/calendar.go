@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -223,6 +224,7 @@ type CalendarCreateCmd struct {
 	Location    string `name:"location" help:"Location"`
 	Attendees   string `name:"attendees" help:"Comma-separated attendee emails"`
 	AllDay      bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
+	ColorId     string `name:"color" help:"Event color ID (1-11). Use 'gog calendar colors' to see available colors."`
 }
 
 func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
@@ -240,6 +242,11 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 		return usage("required: --summary, --from, --to")
 	}
 
+	colorId, err := validateColorId(c.ColorId)
+	if err != nil {
+		return err
+	}
+
 	svc, err := newCalendarService(ctx, account)
 	if err != nil {
 		return err
@@ -252,6 +259,7 @@ func (c *CalendarCreateCmd) Run(ctx context.Context, flags *RootFlags) error {
 		Start:       buildEventDateTime(c.From, c.AllDay),
 		End:         buildEventDateTime(c.To, c.AllDay),
 		Attendees:   buildAttendees(c.Attendees),
+		ColorId:     colorId,
 	}
 
 	created, err := svc.Events.Insert(calendarID, event).Do()
@@ -275,6 +283,7 @@ type CalendarUpdateCmd struct {
 	Location    string `name:"location" help:"New location (set empty to clear)"`
 	Attendees   string `name:"attendees" help:"Comma-separated attendee emails (set empty to clear)"`
 	AllDay      bool   `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
+	ColorId     string `name:"color" help:"Event color ID (1-11, or empty to clear)"`
 }
 
 func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *RootFlags) error {
@@ -323,6 +332,14 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *
 	}
 	if flagProvided(kctx, "attendees") {
 		patch.Attendees = buildAttendees(c.Attendees)
+		changed = true
+	}
+	if flagProvided(kctx, "color") {
+		colorId, colorErr := validateColorId(c.ColorId)
+		if colorErr != nil {
+			return colorErr
+		}
+		patch.ColorId = colorId
 		changed = true
 	}
 	if !changed {
@@ -579,6 +596,9 @@ func printCalendarEvent(u *ui.UI, event *calendar.Event) {
 	if event.Location != "" {
 		u.Out().Printf("location\t%s", event.Location)
 	}
+	if event.ColorId != "" {
+		u.Out().Printf("color\t%s", event.ColorId)
+	}
 	if len(event.Attendees) > 0 {
 		emails := []string{}
 		for _, a := range event.Attendees {
@@ -629,6 +649,21 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+func validateColorId(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", nil
+	}
+	id, err := strconv.Atoi(s)
+	if err != nil {
+		return "", fmt.Errorf("invalid color ID: %q (must be 1-11)", s)
+	}
+	if id < 1 || id > 11 {
+		return "", fmt.Errorf("color ID must be 1-11 (got %d)", id)
+	}
+	return s, nil
 }
 
 func eventStart(e *calendar.Event) string {

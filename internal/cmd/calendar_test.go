@@ -35,3 +35,30 @@ func TestIsAllDayEvent(t *testing.T) {
 		t.Fatalf("expected true")
 	}
 }
+
+func TestBuildColorId(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{"1", "1", false},
+		{"11", "11", false},
+		{"0", "", true},
+		{"12", "", true},
+		{"", "", false},
+		{"abc", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := validateColorId(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateColorId(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("validateColorId(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
