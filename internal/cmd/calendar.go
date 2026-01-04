@@ -227,7 +227,7 @@ type CalendarCreateCmd struct {
 	Location              string   `name:"location" help:"Location"`
 	Attendees             string   `name:"attendees" help:"Comma-separated attendee emails"`
 	AllDay                bool     `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
-	ColorId               string   `name:"color" help:"Event color ID (1-11). Use 'gog calendar colors' to see available colors."`
+	ColorId               string   `name:"event-color" help:"Event color ID (1-11). Use 'gog calendar colors' to see available colors."`
 	Visibility            string   `name:"visibility" help:"Event visibility: default, public, private, confidential"`
 	Transparency          string   `name:"transparency" help:"Show as busy (opaque) or free (transparent). Aliases: busy, free"`
 	SendUpdates           string   `name:"send-updates" help:"Notification mode: all, externalOnly, none (default: all)"`
@@ -340,7 +340,7 @@ type CalendarUpdateCmd struct {
 	Location              string   `name:"location" help:"New location (set empty to clear)"`
 	Attendees             string   `name:"attendees" help:"Comma-separated attendee emails (set empty to clear)"`
 	AllDay                bool     `name:"all-day" help:"All-day event (use date-only in --from/--to)"`
-	ColorId               string   `name:"color" help:"Event color ID (1-11, or empty to clear)"`
+	ColorId               string   `name:"event-color" help:"Event color ID (1-11, or empty to clear)"`
 	Visibility            string   `name:"visibility" help:"Event visibility: default, public, private, confidential"`
 	Transparency          string   `name:"transparency" help:"Show as busy (opaque) or free (transparent). Aliases: busy, free"`
 	GuestsCanInviteOthers *bool    `name:"guests-can-invite" help:"Allow guests to invite others"`
@@ -416,7 +416,7 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *
 		patch.Attendees = buildAttendees(c.Attendees)
 		changed = true
 	}
-	if flagProvided(kctx, "color") {
+	if flagProvided(kctx, "event-color") {
 		colorId, colorErr := validateColorId(c.ColorId)
 		if colorErr != nil {
 			return colorErr
