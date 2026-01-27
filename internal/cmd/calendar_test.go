@@ -232,6 +232,12 @@ func TestBuildRecurrence(t *testing.T) {
 	if len(got) != 2 || got[0] != "RRULE:FREQ=DAILY" || got[1] != "EXDATE:20250101" {
 		t.Fatalf("unexpected: %#v", got)
 	}
+
+	// Test BYDAY parameter with commas (issue #120)
+	got = buildRecurrence([]string{"RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"})
+	if len(got) != 1 || got[0] != "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR" {
+		t.Fatalf("BYDAY rule corrupted: %#v", got)
+	}
 }
 
 func TestParseDuration(t *testing.T) {
