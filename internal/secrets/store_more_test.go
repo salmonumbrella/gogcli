@@ -13,7 +13,10 @@ import (
 	"github.com/steipete/gogcli/internal/config"
 )
 
-var errTestKeychain = errors.New("test -25308 error")
+var (
+	errTestKeychain = errors.New("test -25308 error")
+	errNoTTYForTest = errors.New("no tty")
+)
 
 func TestKeyringStore_ListDeleteDefault(t *testing.T) {
 	ring := keyring.NewArrayKeyring(nil)
@@ -126,6 +129,123 @@ func TestFileKeyringPasswordFuncFrom(t *testing.T) {
 	if _, err := fn("prompt"); err == nil || !errors.Is(err, errNoTTY) {
 		t.Fatalf("expected no TTY error, got: %v", err)
 	}
+
+	// No env var and TTY available uses terminal prompt function.
+	origTerminalPrompt := terminalPromptFunc
+	terminalPromptFunc = func(prompt string) (string, error) {
+		return "typed:" + prompt, nil
+	}
+
+	t.Cleanup(func() { terminalPromptFunc = origTerminalPrompt })
+
+	fn = fileKeyringPasswordFuncFrom("", false, true)
+	if got, err := fn("prompt"); err != nil {
+		t.Fatalf("expected terminal prompt success, got err: %v", err)
+	} else if got != "typed:prompt" {
+		t.Fatalf("unexpected prompt value: %q", got)
+	}
+}
+
+func TestKeyringPasswordFromEnvFrom(t *testing.T) {
+	tests := []struct {
+		name      string
+		env       map[string]string
+		wantValue string
+		wantSet   bool
+	}{
+		{
+			name:      "unset",
+			env:       map[string]string{},
+			wantValue: "",
+			wantSet:   false,
+		},
+		{
+			name: "canonical wins",
+			env: map[string]string{
+				keyringPasswordEnv:       "canon",
+				keyringPasswordCompatEnv: "compat",
+				keyringPasswordLegacyEnv: "legacy",
+			},
+			wantValue: "canon",
+			wantSet:   true,
+		},
+		{
+			name: "compat fallback",
+			env: map[string]string{
+				keyringPasswordCompatEnv: "compat",
+				keyringPasswordLegacyEnv: "legacy",
+			},
+			wantValue: "compat",
+			wantSet:   true,
+		},
+		{
+			name: "legacy fallback",
+			env: map[string]string{
+				keyringPasswordLegacyEnv: "legacy",
+			},
+			wantValue: "legacy",
+			wantSet:   true,
+		},
+		{
+			name: "empty canonical is intentional",
+			env: map[string]string{
+				keyringPasswordEnv: "",
+			},
+			wantValue: "",
+			wantSet:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotValue, gotSet := keyringPasswordFromEnvFrom(func(k string) (string, bool) {
+				v, ok := tt.env[k]
+				return v, ok
+			})
+			if gotValue != tt.wantValue || gotSet != tt.wantSet {
+				t.Fatalf("got (%q, %v), want (%q, %v)", gotValue, gotSet, tt.wantValue, tt.wantSet)
+			}
+		})
+	}
+}
+
+func TestHasTerminalPromptInputFrom(t *testing.T) {
+	t.Run("stdin tty", func(t *testing.T) {
+		called := false
+
+		got := hasTerminalPromptInputFrom(true, func() error {
+			called = true
+			return nil
+		})
+		if !got {
+			t.Fatalf("expected prompt input when stdin is tty")
+		}
+
+		if called {
+			t.Fatalf("did not expect openTTY call when stdin is tty")
+		}
+	})
+
+	t.Run("tty fallback works", func(t *testing.T) {
+		got := hasTerminalPromptInputFrom(false, func() error { return nil })
+		if !got {
+			t.Fatalf("expected prompt input from tty fallback")
+		}
+	})
+
+	t.Run("tty fallback unavailable", func(t *testing.T) {
+		got := hasTerminalPromptInputFrom(false, func() error { return errNoTTYForTest })
+		if got {
+			t.Fatalf("expected no prompt input without tty")
+		}
+	})
+
+	t.Run("no open func", func(t *testing.T) {
+		got := hasTerminalPromptInputFrom(false, nil)
+		if got {
+			t.Fatalf("expected no prompt input without openTTY function")
+		}
+	})
 }
 
 func TestKeyringStoreSetTokenErrors(t *testing.T) {

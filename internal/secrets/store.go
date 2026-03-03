@@ -47,8 +47,10 @@ func keyringItem(key string, data []byte) keyring.Item {
 }
 
 const (
-	keyringPasswordEnv = "GOG_KEYRING_PASSWORD" //nolint:gosec // env var name, not a credential
-	keyringBackendEnv  = "GOG_KEYRING_BACKEND"  //nolint:gosec // env var name, not a credential
+	keyringPasswordEnv       = "GOG_KEYRING_PASSWORD"      //nolint:gosec // env var name, not a credential
+	keyringPasswordCompatEnv = "GOGCLI_KEYRING_PASSPHRASE" //nolint:gosec // env var name, not a credential
+	keyringPasswordLegacyEnv = "KEYRING_FILE_PASSPHRASE"   //nolint:gosec // env var name, not a credential
+	keyringBackendEnv        = "GOG_KEYRING_BACKEND"       //nolint:gosec // env var name, not a credential
 )
 
 var (
@@ -60,6 +62,8 @@ var (
 	errKeyringTimeout        = errors.New("keyring connection timed out")
 	openKeyringFunc          = openKeyring
 	keyringOpenFunc          = keyring.Open
+	openTTYFileFunc          = func() (*os.File, error) { return os.OpenFile("/dev/tty", os.O_RDWR, 0) }
+	terminalPromptFunc       = promptOnTerminal
 )
 
 type KeyringBackendInfo struct {
@@ -126,7 +130,7 @@ func fileKeyringPasswordFuncFrom(password string, passwordSet bool, isTTY bool) 
 	}
 
 	if isTTY {
-		return keyring.TerminalPrompt
+		return terminalPromptFunc
 	}
 
 	return func(_ string) (string, error) {
@@ -135,8 +139,74 @@ func fileKeyringPasswordFuncFrom(password string, passwordSet bool, isTTY bool) 
 }
 
 func fileKeyringPasswordFunc() keyring.PromptFunc {
-	password, passwordSet := os.LookupEnv(keyringPasswordEnv)
-	return fileKeyringPasswordFuncFrom(password, passwordSet, term.IsTerminal(int(os.Stdin.Fd())))
+	password, passwordSet := keyringPasswordFromEnv()
+	return fileKeyringPasswordFuncFrom(password, passwordSet, hasTerminalPromptInput())
+}
+
+func keyringPasswordFromEnvFrom(lookup func(string) (string, bool)) (string, bool) {
+	for _, envKey := range []string{keyringPasswordEnv, keyringPasswordCompatEnv, keyringPasswordLegacyEnv} {
+		if value, ok := lookup(envKey); ok {
+			return value, true
+		}
+	}
+
+	return "", false
+}
+
+func keyringPasswordFromEnv() (string, bool) {
+	return keyringPasswordFromEnvFrom(os.LookupEnv)
+}
+
+func hasTerminalPromptInputFrom(stdinIsTTY bool, openTTY func() error) bool {
+	if stdinIsTTY {
+		return true
+	}
+
+	if openTTY == nil {
+		return false
+	}
+
+	return openTTY() == nil
+}
+
+func hasTerminalPromptInput() bool {
+	return hasTerminalPromptInputFrom(term.IsTerminal(int(os.Stdin.Fd())), func() error {
+		tty, err := openTTYFileFunc()
+		if err != nil {
+			return err
+		}
+
+		return tty.Close()
+	})
+}
+
+func promptOnTerminal(prompt string) (string, error) {
+	tty, err := openTTYFileFunc()
+	if err != nil {
+		password, promptErr := keyring.TerminalPrompt(prompt)
+		if promptErr != nil {
+			return "", fmt.Errorf("prompt password from stdin: %w", promptErr)
+		}
+
+		return password, nil
+	}
+
+	defer tty.Close()
+
+	if _, err = fmt.Fprintf(tty, "%s: ", prompt); err != nil {
+		return "", fmt.Errorf("write tty prompt: %w", err)
+	}
+
+	password, err := term.ReadPassword(int(tty.Fd()))
+	if err != nil {
+		return "", fmt.Errorf("read tty password: %w", err)
+	}
+
+	if _, err = fmt.Fprintln(tty); err != nil {
+		return "", fmt.Errorf("write tty newline: %w", err)
+	}
+
+	return string(password), nil
 }
 
 func normalizeKeyringBackend(value string) string {
